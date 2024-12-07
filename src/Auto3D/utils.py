@@ -337,7 +337,7 @@ def enantiomer(l1,  l2):
     return indicator
             
 def enantiomer_helper(smiles):
-    """get non-enantiomer SMILES from given smiles"""
+    """get non-enantiomer SMILES from given list of smiles"""
     mols = [Chem.MolFromSmiles(smi) for smi in smiles]
     stereo_centers = [Chem.FindMolChiralCenters(mol, useLegacyImplementation=False) for mol in mols]
     non_enantiomers = []
@@ -346,10 +346,11 @@ def enantiomer_helper(smiles):
         smi = smiles[i]
         stereo = stereo_centers[i]
         indicator = True
-        for j in range(len(non_centers)):
-            stereo_j = non_centers[j]
-            if enantiomer(stereo_j, stereo):
-                indicator = False
+        if len(stereo)>0:
+            for stereo_j in non_centers:
+                if enantiomer(stereo_j, stereo):
+                    indicator = False
+                    break
         if indicator:
             non_centers.append(stereo)
             non_enantiomers.append(smi)
