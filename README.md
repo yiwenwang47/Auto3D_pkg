@@ -29,3 +29,5 @@ Auto3D is published on [JCIM](https://doi.org/10.1021/acs.jcim.2c00817). For cit
     publisher={ACS Publications}
 }
 ```
+
+This is a fork. Change log coming soon.
