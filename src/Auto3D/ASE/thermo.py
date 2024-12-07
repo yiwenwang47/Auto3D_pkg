@@ -177,7 +177,8 @@ def do_mol_thermo(mol: Chem.Mol,
                             potentialenergy=e,
                             atoms=atoms,
                             geometry='nonlinear',
-                            symmetrynumber=1, spin=0)
+                            symmetrynumber=1, spin=0,
+                            ignore_imag_modes=True)
     H = thermo.get_enthalpy(temperature=T) * ev2hatree
     S = thermo.get_entropy(temperature=T, pressure=101325) * ev2hatree
     G = thermo.get_gibbs_energy(temperature=T, pressure=101325) * ev2hatree
