@@ -91,6 +91,11 @@ class tautomer_engine(object):
         else:
             raise ValueError(f'{self.mode} must be one of "oechem" or "rdkit".')
 
+def is_embedding_difficult(mol: Chem.Mol, numThreads: int) -> bool:
+    """Check if embedding is difficult for a molecule"""
+    cids = AllChem.EmbedMultipleConfs(mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=100)
+    return len(cids) < 4
+
 class rd_isomer(object):
     """
     Enumerating stereoisomers for each SMILES representation with RDKit.
@@ -160,15 +165,16 @@ class rd_isomer(object):
         if self.n_conformers is None:
             # The formula is based on this paper: https://doi.org/10.1021/acs.jctc.0c01213
             num_rotatable_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
-            num_heavy_atoms = len([atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1])
+            num_heavy_atoms = mol.GetNumHeavyAtoms()
             n_conformers = min(max(num_heavy_atoms, int(2 * 8.481 * (num_rotatable_bonds **1.642))), 1000)
-            AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers,
-                                    randomSeed=42, numThreads=self.np,
-                                    pruneRmsThresh=self.threshold)
         else:
-            AllChem.EmbedMultipleConfs(mol, numConfs=self.n_conformers,
+            n_conformers = self.n_conformers
+
+        AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers,
                                     randomSeed=42, numThreads=self.np,
-                                    pruneRmsThresh=self.threshold)
+                                    pruneRmsThresh=self.threshold, maxAttempts=100, 
+                                    useRandomCoords=is_embedding_difficult(mol, self.np))
+
         return mol
 
     def run(self):
@@ -209,7 +215,7 @@ class rd_isomer(object):
                 mol = self.embed_conformer(smi)
                 for i in range(mol.GetNumConformers()):
                     positions = mol.GetConformer(i).GetPositions()
-                    # atoms clashes if distance is smaller than 0.9 Angstrom
+                    # atoms clash if min distance is smaller than 0.9 Angstrom
                     if min_pairwise_distance(positions) < 0.9:
                         AllChem.MMFFOptimizeMolecule(mol, confId=i)
                     positions = mol.GetConformer(i).GetPositions()
