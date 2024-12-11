@@ -13,7 +13,7 @@ import torch
 import collections
 from collections import defaultdict, OrderedDict
 import shutil
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 from io import StringIO
 from rdkit import Chem

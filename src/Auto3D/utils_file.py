@@ -6,7 +6,7 @@ import os
 import glob
 import time
 from collections import defaultdict, OrderedDict
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import rdMolAlign, inchi

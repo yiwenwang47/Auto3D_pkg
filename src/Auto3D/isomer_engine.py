@@ -23,7 +23,7 @@ try:
     from openeye import oeomega
 except:
     pass
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 # logger = logging.getLogger("auto3d")

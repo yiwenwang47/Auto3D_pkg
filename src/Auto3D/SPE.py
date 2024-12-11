@@ -16,7 +16,7 @@ except:
     pass
 from rdkit import Chem
 from rdkit.Chem import rdmolops
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from Auto3D.batch_opt.batchopt import mols2lists, EnForce_ANI
 from Auto3D.batch_opt.batchopt import padding_coords, padding_species
 from Auto3D.utils import hartree2ev
