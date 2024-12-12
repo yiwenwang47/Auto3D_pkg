@@ -19,7 +19,7 @@ from io import StringIO
 from rdkit import Chem
 from rdkit.Chem import rdMolTransforms, rdMolAlign, inchi, rdDetermineBonds
 from rdkit.Chem.rdMolDescriptors import CalcNumAtomStereoCenters, CalcNumUnspecifiedAtomStereoCenters
-from typing import List, Tuple, Dict, Union, Optional, Callable
+from typing import List, Tuple, Dict, Union, Optional, Callable, Iterable
 from Auto3D.utils_file import guess_file_type
 
 #CODATA 2018 energy conversion factor
@@ -399,53 +399,26 @@ def check_connectivity(mol: Chem.Mol) -> bool:
     adjacency_matrix, adjacency_matrix_new = Chem.GetAdjacencyMatrix(mol), Chem.GetAdjacencyMatrix(new_mol)
     return np.allclose(adjacency_matrix, adjacency_matrix_new, atol=1e-1)
 
-# def check_connectivity(mol:Chem.Mol) -> bool:
-#     """Check if there is a new bond formed or a bond broken in the molecule"""
-#     # Initialize UFF bond radii (Rappe et al. JACS 1992)
-#     # Units of angstroms 
-#     # These radii neglect the bond-order and electronegativity corrections in the original paper. Where several values exist for the same atom, the largest was used. 
-#     Radii = {1:0.354, 
-#              5:0.838, 6:0.757, 7:0.700,  8:0.658,  9:0.668,
-#              14:1.117, 15:1.117, 16:1.064, 17:1.044,
-#              32: 1.197, 33:1.211, 34:1.190, 35:1.192,
-#              51:1.407, 52:1.386,  53:1.382}
 
-#     atoms = [atom for atom in mol.GetAtoms()]
-#     n = len(atoms)
-#     for i in range(n):
-#         for j in range(i+1, n, 1):
-#             atom_i = atoms[i]
-#             atom_i_idx = atom_i.GetIdx()
-#             atomic_num_i = atom_i.GetAtomicNum()
-#             pos_i = mol.GetConformer().GetAtomPosition(atom_i_idx)
-
-#             atom_j = atoms[j]
-#             atom_j_idx = atom_j.GetIdx()
-#             atomic_num_j = atom_j.GetAtomicNum()
-#             pos_j = mol.GetConformer().GetAtomPosition(atom_j_idx)
-
-#             bond = mol.GetBondBetweenAtoms(atom_i_idx, atom_j_idx)
-#             reference_length = Radii[atomic_num_i] + Radii[atomic_num_j]
-#             if bond:
-#                 # make sure the bond is not broken
-#                 length = rdMolTransforms.GetBondLength(mol.GetConformers()[0], atom_i_idx, atom_j_idx)
-#                 if length > reference_length * 1.25:
-#                     return False
-#             else:
-#                 # make sure the bond is not formed
-#                 dist = np.linalg.norm(np.array(pos_i) - np.array(pos_j))
-#                 if dist < reference_length * 1.1:
-#                     return False
-#     return True
+def is_equal(mol_i: Chem.Mol, mol_j: Chem.Mol, threshold: float) -> bool:
+    r"""
+    Check if two conformers are the same.
+    Caution: This function does not verify whether the two molecules have the same topology!
+    """
+    # temperoray bug fix for https://github.com/rdkit/rdkit/issues/6826 
+    #removing Hs speeds up the calculation
+    rmsd = rdMolAlign.GetBestRMS(Chem.RemoveHs(mol_i), Chem.RemoveHs(mol_j))
+    return rmsd < threshold
 
 
-
-def filter_unique(mols, crit=0.3):
-    """Remove structures that are very similar.
-       Remove unconverged structures.
+def filter_unique(mols: Iterable[Chem.Mol], threshold: float=0.3, k: int=-1) -> List[Chem.Mol]:
+    """
+    Remove structures that are very similar.
     
     Arguments:
-        mols: rdkit mol objects
+        mols: list of rdkit mol objects
+        threshold: maximum RMSD for two molecules to be considered the same
+        k: only consider the first k unique molecules in the list
     Returns:
         unique_mols: unique molecules
     """
@@ -456,16 +429,15 @@ def filter_unique(mols, crit=0.3):
         unique = True
         for mol_j in unique_mols:
             try:
-                # temperoray bug fix for https://github.com/rdkit/rdkit/issues/6826 
-                #removing Hs speeds up the calculation
-                rmsd = rdMolAlign.GetBestRMS(Chem.RemoveHs(mol_i), Chem.RemoveHs(mol_j))  
+                unique = not is_equal(mol_i=mol_i, mol_j=mol_j, threshold=threshold)
             except RuntimeError:
-                rmsd = 0
-            if rmsd < crit:
                 unique = False
+            if not unique:
                 break
         if unique:
             unique_mols.append(mol_i)
+        if k > 0 and len(unique_mols) >= k:
+            break
     return unique_mols
 
 def no_enantiomer_helper(info1, info2):

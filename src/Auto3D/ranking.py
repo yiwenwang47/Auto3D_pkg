@@ -64,21 +64,21 @@ class ranking(object):
         return list0_
 
 
-    def top_k(self, df_group, k=1):
+    def top_k(self, df_group: pd.DataFrame, k: int=1) -> List[Chem.Mol]:
         '''
-        Given a group of energy_name_idxes,
-        return the top-k lowest name-energies pairs with idxes as keys.
+        Select the k structures with the lowest energies for the given molecule.
+
+        Args:
+            df_group: a small dataframe that contains optimized conformers for the same molecule with columns ["name", "energy", "mol"]
+            k: the number of structures to be selected
+        Returns:
+            out_mols: a list of RDKit molecules with the lowest energies
         '''
-        names = list(df_group["names"])
+        names = list(df_group["name"])
         assert(len(set(names)) == 1)
 
-        df2 = df_group.sort_values(by=['energies'])
-        
-        out_mols_ = filter_unique(list(df2["mols"]), self.threshold)
-        if k < len(out_mols_):
-            out_mols = out_mols_[:k]
-        else:
-            out_mols = out_mols_
+        group = df_group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
+        out_mols = filter_unique(list(group["mol"]), threshold=self.threshold, k=k)
 
         if len(out_mols) == 0:
             name = names[0].split("_")[0].strip()
@@ -94,7 +94,7 @@ class ranking(object):
         return out_mols
 
 
-    def top_window(self, df_group, window=1):
+    def top_window(self, df_group: pd.DataFrame, window: float=1.0) -> List[Chem.Mol]:
         '''
         Given a group of energy_name_idxes,
         return all (idx, name, e) tuples whose energies are within
@@ -102,12 +102,16 @@ class ranking(object):
         http://wild.life.nctu.edu.tw/class/common/energy-unit-conv-table.html
         '''
         window = (window/ev2kcalpermol)  # convert energy window into eV unit
-        names = list(df_group["names"])
+        names = list(df_group["name"])
         assert(window >= 0)
         assert(len(set(names)) == 1)
 
-        df2 = df_group.sort_values(by=['energies'])
-        out_mols_ = filter_unique(list(df2['mols']), self.threshold)
+        group = df_group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
+        minimum = group['energy'].min()
+        maximum = window + minimum
+        group = group.loc[group['energy'] <= maximum]
+
+        out_mols_ = filter_unique(list(group['mols']), self.threshold)
         out_mols = []
 
         if len(out_mols_) == 0:
@@ -115,39 +119,36 @@ class ranking(object):
             print(f"No structure converged for {name}.", flush=True)
             logging.info(f"No structure converged for {name}.")
         else:
-            ref_energy = float(out_mols_[0].GetProp('E_tot'))
+            ref_energy = minimum
             for mol in out_mols_:
                 my_energy = float(mol.GetProp('E_tot'))
                 rel_energy = my_energy - ref_energy
-                if rel_energy <= window:
-                    mol.SetProp('E_rel(eV)', str(rel_energy))
-                    out_mols.append(mol)
-                else:
-                    break
+                mol.SetProp('E_rel(eV)', str(rel_energy))
+                out_mols.append(mol)
         return out_mols
 
     def run(self) -> List[Chem.Mol]:
         """
-        When runs, lowest-energy structure will be stored in out_path.
+        Lowest-energy structures will be stored in self.out_path.
         """
-        print("Begin to select structures that satisfy the requirements...", flush=True)
-        logging.info("Begin to select structures that satisfy the requirements...")
+        print("Selecting structures that satisfy the requirements...", flush=True)
+        logging.info("Selecting to select structures that satisfy the requirements...")
         results = []
 
         data2 = Chem.SDMolSupplier(self.input_path, removeHs=False)
         mols, names, energies = [], [], []
-        for mol in tqdm(data2):
+        for mol in data2:
             if (mol is not None) and (mol.GetProp('Converged').lower() == 'true') and check_connectivity(mol): # Verify convergence and correct connectivity
                 mols.append(mol)
                 names.append(mol.GetProp('_Name').strip().split("_")[0].strip())
                 energies.append(float(mol.GetProp('E_tot')))
         
-        df = pd.DataFrame({"names": names, "energies": energies, "mols": mols})
+        df = pd.DataFrame({"name": names, "energy": energies, "mol": mols})
 
-        df2 = df.groupby("names")
+        df2 = df.groupby("name")
         for group_name in tqdm(df2.indices):
             group = df2.get_group(group_name)
-
+            group = group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
             if self.k:
                 top_results = self.top_k(group, self.k)
             elif self.window:
@@ -159,7 +160,7 @@ class ranking(object):
             results += top_results
 
         with Chem.SDWriter(self.out_path) as f:
-            for mol in tqdm(results):
+            for mol in results:
                 # Change the energy unit from eV back to Hartree
                 mol.SetProp('E_tot', str(float(mol.GetProp('E_tot'))/hartree2ev))
                 mol.SetProp('E_rel(kcal/mol)', str(float(mol.GetProp('E_rel(eV)')) * ev2kcalpermol))
