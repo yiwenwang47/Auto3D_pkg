@@ -46,10 +46,10 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 
-def isomer_wraper(chunk_info, args, queue, logging_queue):
+def isomer_wraper(chunk_info, config_main, queue, logging_queue):
     """
     chunk_info: (path, dir) tuple for the chunk
-    args: auto3D arguments
+    config_main: auto3D arguments
     queue: mp.queue
     logging_queue
     """
@@ -65,12 +65,14 @@ def isomer_wraper(chunk_info, args, queue, logging_queue):
         meta = create_chunk_meta_names(path, dir)
 
         # Tautomer enumeratioin
-        if args.enumerate_tautomer:
+        if config_main.enumerate_tautomer:
             output_taut = meta["output_taut"]
-            taut_mode = args.tauto_engine
+            taut_mode = config_main.tauto_engine
             print("Enumerating tautomers for the input...", end="")
             logger.info("Enumerating tautomers for the input...")
-            taut_engine = tautomer_engine(taut_mode, path, output_taut, args.pKaNorm)
+            taut_engine = tautomer_engine(
+                taut_mode, path, output_taut, config_main.pKaNorm
+            )
             taut_engine.run()
             hash_taut_smi(output_taut, output_taut)
             path = output_taut
@@ -81,14 +83,14 @@ def isomer_wraper(chunk_info, args, queue, logging_queue):
         smiles_reduced = meta["smiles_reduced"]
         smiles_hashed = meta["smiles_hashed"]
         enumerated_sdf = meta["enumerated_sdf"]
-        max_confs = args.max_confs
-        duplicate_threshold = args.threshold
-        mpi_np = args.mpi_np
-        enumerate_isomer = args.enumerate_isomer
-        isomer_program = args.isomer_engine
+        max_confs = config_main.max_confs
+        duplicate_threshold = config_main.threshold
+        mpi_np = config_main.mpi_np
+        enumerate_isomer = config_main.enumerate_isomer
+        isomer_program = config_main.isomer_engine
         # Isomer enumeration step
         if isomer_program == "omega":
-            mode_oe = args.mode_oe
+            mode_oe = config_main.mode_oe
             oe_isomer(
                 mode_oe,
                 path,
@@ -101,7 +103,7 @@ def isomer_wraper(chunk_info, args, queue, logging_queue):
                 enumerate_isomer,
             )
         elif isomer_program == "rdkit":
-            if args.input_format == "smi":
+            if config_main.input_format == "smi":
                 engine = rd_isomer(
                     path,
                     smiles_enumerated,
@@ -115,7 +117,7 @@ def isomer_wraper(chunk_info, args, queue, logging_queue):
                     enumerate_isomer,
                 )
                 engine.run()
-            elif args.input_format == "sdf":
+            elif config_main.input_format == "sdf":
                 engine = rd_isomer_sdf(
                     path, enumerated_sdf, max_confs, duplicate_threshold, mpi_np
                 )
@@ -123,20 +125,22 @@ def isomer_wraper(chunk_info, args, queue, logging_queue):
         else:
             raise ValueError(
                 'The isomer enumeration engine must be "omega" or "rdkit", '
-                f"but {args.isomer_engine} was parsed. "
+                f"but {config_main.isomer_engine} was parsed. "
                 "You can set the parameter by appending the following:"
                 "--isomer_engine=rdkit"
             )
 
         queue.put((enumerated_sdf, path, dir, i + 1))
-    if isinstance(args.gpu_idx, int) or len(args.gpu_idx) == 1:
+    if isinstance(config_main.gpu_idx, int) or len(config_main.gpu_idx) == 1:
         queue.put("Done")
     else:
-        for _ in range(len(args.gpu_idx)):
+        for _ in range(len(config_main.gpu_idx)):
             queue.put("Done")
 
 
-def optim_rank_wrapper(args, queue, logging_queue, gpu_idx: int) -> List[Chem.Mol]:
+def optim_rank_wrapper(
+    config_main, queue, logging_queue, gpu_idx: int
+) -> List[Chem.Mol]:
     # prepare logging
     logger = logging.getLogger("auto3d")
     logger.addHandler(QueueHandler(logging_queue))
@@ -153,10 +157,10 @@ def optim_rank_wrapper(args, queue, logging_queue, gpu_idx: int) -> List[Chem.Mo
         meta = create_chunk_meta_names(path, dir)
 
         # Optimizing step
-        opt_steps = args.opt_steps
-        opt_tol = args.convergence_threshold
-        patience = args.patience
-        batchsize_atoms = args.batchsize_atoms
+        opt_steps = config_main.opt_steps
+        opt_tol = config_main.convergence_threshold
+        patience = config_main.patience
+        batchsize_atoms = config_main.batchsize_atoms
         config = {
             "opt_steps": opt_steps,
             "opttol": opt_tol,
@@ -164,8 +168,8 @@ def optim_rank_wrapper(args, queue, logging_queue, gpu_idx: int) -> List[Chem.Mo
             "batchsize_atoms": batchsize_atoms,
         }
         optimized_og = meta["optimized_og"]
-        optimizing_engine = args.optimizing_engine
-        if args.use_gpu:
+        optimizing_engine = config_main.optimizing_engine
+        if config_main.use_gpu:
             device = torch.device(f"cuda:{gpu_idx}")
         else:
             device = torch.device("cpu")
@@ -176,9 +180,9 @@ def optim_rank_wrapper(args, queue, logging_queue, gpu_idx: int) -> List[Chem.Mo
 
         # Ranking step
         output = meta["output"]
-        duplicate_threshold = args.threshold
-        k = args.k
-        window = args.window
+        duplicate_threshold = config_main.threshold
+        k = config_main.k
+        window = config_main.window
         rank_engine = ranking(
             optimized_og, output, duplicate_threshold, k=k, window=window
         )
@@ -193,7 +197,7 @@ def optim_rank_wrapper(args, queue, logging_queue, gpu_idx: int) -> List[Chem.Mo
         with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
             tar.add(housekeeping_folder, arcname=os.path.basename(housekeeping_folder))
         shutil.rmtree(housekeeping_folder)
-        if not args.verbose:
+        if not config_main.verbose:
             try:  # Clusters does not support send2trash
                 send2trash(housekeeping_folder_gz)
             except:
@@ -288,9 +292,8 @@ def logger_process(queue, logging_path):
         logger.handle(message)
 
 
-def main(**kwargs):
-    """Take the arguments from the ``options`` function and run Auto3D."""
-    # Ensure spawn method is used
+def _prep_work(**kwargs):
+    # Make sure the spawn method is used
     try:
         mp.set_start_method("fork")
     except RuntimeError:
@@ -300,24 +303,16 @@ def main(**kwargs):
         **{key: kwargs[key] for key in kwargs if key in Config.__annotations__}
     )
 
-    chunk_line = mp.Manager().Queue()  # A queue managing two wrappers
-    start = time.time()
-    # job_name = datetime.now().strftime("%Y%m%d-%H%M%S-%f")  #adds microsecond in the end
-
     if config.path is None:
         sys.exit("Please specify the input file path.")
     path0, mapping = encode_ids(config.path)
     input_format = os.path.splitext(path0)[1][1:]
     if (input_format != "smi") and (input_format != "sdf"):
         sys.exit(
-            "Input file type is not supported. Only .smi and .sdf are supported. But the input file is "
-            + input_format
-            + "."
+            f"Input file type is not supported. Only .smi and .sdf are supported. But the input file is {input_format}."
         )
     config.input_format = input_format
-    k = config.k
-    window = config.window
-    if (not k) and (not window):
+    if config.k is None and config.window is None:
         sys.exit(
             "Either k or window needs to be specified. "
             "Usually, setting '--k=1' satisfies most needs."
@@ -325,13 +320,14 @@ def main(**kwargs):
     if config.job_name == "":
         config.job_name = datetime.now().strftime(
             "%Y%m%d-%H%M%S-%f"
-        )  # adds microsecond in the end
+        )  # adds microsecond at the end
     job_name = config.job_name
+
+    chunk_line = mp.Manager().Queue()  # A queue managing two wrappers
 
     # initialiazation
     basename = os.path.basename(path0)
     dir = os.path.dirname(os.path.abspath(path0))
-    # job_name = job_name + "_" + basename.split('.')[0].strip()
     job_name = basename.split(".")[0].strip()[:-8] + "_" + job_name  # remove '_encoded'
     job_name = os.path.join(dir, job_name)
     os.mkdir(job_name)
@@ -379,7 +375,11 @@ def main(**kwargs):
     )
 
     check_input(config)
-    # Devide jobs based on memory
+
+    return config, job_name, path0, mapping, chunk_line, logger, logging_queue
+
+
+def _divide_jobs_based_on_memory(config):
     smiles_per_G = config.capacity  # Allow 40 SMILES per GB memory
     num_jobs = 1
     if config.memory is not None:
@@ -400,83 +400,96 @@ def main(**kwargs):
             t = int(psutil.virtual_memory().total / (1024**3))
     chunk_size = t * smiles_per_G
     # batchsize_atoms based on GPU memory
+    config.t = t
     config.batchsize_atoms = config.batchsize_atoms * t
+    config.num_jobs, config.chunk_size = num_jobs, chunk_size
+    return config
 
+
+def _save_chunks(config, logger, job_name, path0):
+    basename = os.path.basename(path0).split(".")[0].strip()
+    input_format = config.input_format
+    t, chunk_size, num_jobs = config.t, config.chunk_size, config.num_jobs
     # Get indexes for each chunk
-    if input_format == "smi":
-        df = pd.read_csv(path0, sep="\s+", header=None)
-    elif input_format == "sdf":
-        df = SDF2chunks(path0)
+    match input_format:
+        case "smi":
+            df = pd.read_csv(path0, sep="\s+", header=None)
+        case "sdf":
+            df = SDF2chunks(path0)
     data_size = len(df)
     num_chunks = max(int(data_size // chunk_size + 1), num_jobs)
     print(f"The available memory is {t} GB.", flush=True)
-    print(f"The task will be divided into {num_chunks} jobs.", flush=True)
+    print(f"The task will be divided into {num_chunks} job(s).", flush=True)
     logger.info(f"The available memory is {t} GB.")
     logger.info(f"The task will be divided into {num_chunks} jobs.")
-    chunk_idxes = [[] for _ in range(num_chunks)]
+    chunk_idx = [[] for _ in range(num_chunks)]
     for i in range(num_chunks):
         idx = i
         while idx < data_size:
-            chunk_idxes[i].append(idx)
+            chunk_idx[i].append(idx)
             idx += num_chunks
-
-    # Save each chunk as smi
+    # Save each chunk as an individual file
     chunk_info = []
-    basename = os.path.basename(path0).split(".")[0].strip()
-    if input_format == "smi":
-        for i in range(num_chunks):
-            dir = os.path.join(job_name, f"job{i+1}")
-            os.mkdir(dir)
-            new_basename = basename + "_" + str(i + 1) + ".smi"
-            new_name = os.path.join(dir, new_basename)
-            df_i = df.iloc[chunk_idxes[i], :]
-            df_i.to_csv(new_name, header=None, index=None, sep=" ")
-            path = new_name
+    for i in range(num_chunks):
+        dir_ = os.path.join(job_name, f"job{i+1}")
+        os.mkdir(dir_)
+        new_basename = basename + "_" + str(i + 1) + f".{input_format}"
+        new_name = os.path.join(dir_, new_basename)
+        match input_format:
+            case "smi":
+                df_i = df.iloc[chunk_idx[i], :]
+                df_i.to_csv(new_name, header=None, index=None, sep=" ")
+            case "sdf":
+                chunks_i = [df[j] for j in chunk_idx[i]]
+                with open(new_name, "w") as f:
+                    for chunk in chunks_i:
+                        for line in chunk:
+                            f.write(line)
+        path = new_name
+        print(f"Job{i+1}, number of inputs: {len(df_i)}", flush=True)
+        logger.info(f"Job{i+1}, number of inputs: {len(df_i)}")
+        chunk_info.append((path, dir_))
+    return chunk_info
 
-            print(f"Job{i+1}, number of inputs: {len(df_i)}", flush=True)
-            logger.info(f"Job{i+1}, number of inputs: {len(df_i)}")
-            chunk_info.append((path, dir))
-    elif input_format == "sdf":
-        for i in range(num_chunks):
-            dir = os.path.join(job_name, f"job{i+1}")
-            os.mkdir(dir)
-            new_basename = basename + "_" + str(i + 1) + ".sdf"
-            new_name = os.path.join(dir, new_basename)
-            chunks_i = [df[j] for j in chunk_idxes[i]]
-            with open(new_name, "w") as f:
-                for chunk in chunks_i:
-                    for line in chunk:
-                        f.write(line)
-            path = new_name
-            print(f"Job{i+1}, number of inputs: {len(chunks_i)}", flush=True)
-            logger.info(f"Job{i+1}, number of inputs: {len(chunks_i)}")
-            chunk_info.append((path, dir))
 
+def main(**kwargs):
+    """Run Auto3D."""
+
+    # Preprocessing work
+    config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
+        **kwargs
+    )
+    config = _divide_jobs_based_on_memory(config)
+    start = time.time()
+    chunk_info = _save_chunks(config, logger, job_name, path0)
+
+    print(chunk_info)
+
+    # Starting the processes
     p1 = mp.Process(
         target=isomer_wraper,
-        args=(
-            chunk_info,
-            config,
-            chunk_line,
-            logging_queue,
-        ),
+        kwargs={
+            "chunk_info": chunk_info,
+            "config_main": config,
+            "queue": chunk_line,
+            "logging_queue": logging_queue,
+        },
     )
     p2s = []
     if isinstance(config.gpu_idx, int):
+        config.gpu_idx = [config.gpu_idx]
+    for idx in config.gpu_idx:
         p2s.append(
             mp.Process(
                 target=optim_rank_wrapper,
-                args=(config, chunk_line, logging_queue, config.gpu_idx),
+                kwargs={
+                    "config_main": config,
+                    "queue": chunk_line,
+                    "logging_queue": logging_queue,
+                    "gpu_idx": idx,
+                },
             )
         )
-    else:
-        for idx in config.gpu_idx:
-            p2s.append(
-                mp.Process(
-                    target=optim_rank_wrapper,
-                    args=(config, chunk_line, logging_queue, idx),
-                )
-            )
     p1.start()
     for p2 in p2s:
         p2.start()
@@ -499,6 +512,7 @@ def main(**kwargs):
         with open(file, "r") as f:
             data_i = f.readlines()
         data += data_i
+    basename = os.path.basename(path0).split(".")[0].strip()
     combined_basename = basename + "_out.sdf"
     path_combined = os.path.join(job_name, combined_basename)
     with open(path_combined, "w+") as f:

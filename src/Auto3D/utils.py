@@ -111,7 +111,7 @@ def check_input(args):
             )
     if os.path.exists(args.optimizing_engine):
         try:
-            model_ = torch.jit.load(args.optimizing_engine)
+            _ = torch.jit.load(args.optimizing_engine)
         except:
             sys.exit(
                 "A path to a user NNP is used as optimizing engine, but it cannot be loaded by torch.load. See this link for information about saving and loading models: https://pytorch.org/tutorials/beginner/saving_loading_models.html#save-load-entire-model"
