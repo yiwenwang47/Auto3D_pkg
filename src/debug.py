@@ -1,21 +1,21 @@
-import os
 import argparse
-import sys
-import yaml
 import logging
-from rdkit import Chem
-import send2trash
+import os
 import shutil
+import sys
+
+import send2trash
+import yaml
+from rdkit import Chem
+
 import Auto3D
-from Auto3D.auto3D import options, main, smiles2mols
-from Auto3D.tautomer import get_stable_tautomers
+from Auto3D.auto3D import main, options, smiles2mols
 from Auto3D.ranking import ranking
+from Auto3D.tautomer import get_stable_tautomers
 from Auto3D.utils import my_name_space
 from Auto3D.utils_file import find_smiles_not_in_sdf
 
-
 if __name__ == "__main__":
-
 
     print(Auto3D.__version__)
 
@@ -44,15 +44,14 @@ if __name__ == "__main__":
     #         mol13 = mol
     #         print('found 13')
     #         break
-    
+
     # print('calculating rmsd')
     # rmsd = rdMolAlign.GetBestRMS(Chem.RemoveHs(mol22), Chem.RemoveHs(mol13))
     # print(rmsd)
 
     from rdkit.Chem import rdMolAlign
 
-
-    path = '/home/jack/Auto3D_pkg/src/debug.sdf'
+    path = "/home/jack/Auto3D_pkg/src/debug.sdf"
     supp = Chem.SDMolSupplier(path, removeHs=True)
     mol1 = supp[0]
     mol2 = supp[1]

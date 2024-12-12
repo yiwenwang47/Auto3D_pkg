@@ -40,7 +40,7 @@ If you have a large number of molecuels, using the ``options`` and the ``main`` 
 
    if __name__ == "__main__":
        input_path = "example/files/smiles.smi"  # this can also be an SDF file
-       args = options(input_path, k=1)   #args specify the parameters for Auto3D 
+       args = options(input_path, k=1)   #args specify the parameters for Auto3D
        out = main(args)                  #main accepts the parameters and runs Auto3D
 
 
@@ -99,8 +99,8 @@ are writing a custom Python script;
 
    if __name__ == "__main__":
        input_path = "example/files/smiles.smi"
-       args = options(input_path, k=1, optimizing_engine="ANI2x")  
-       out = main(args)           
+       args = options(input_path, k=1, optimizing_engine="ANI2x")
+       out = main(args)
 
 You need the following block if you use the CLI.
 
@@ -116,7 +116,7 @@ You need the following block if you use the CLI.
      - Type
      - Name
      - Explanation
-   * - 
+   * -
      - required argument
      - path
      - A path of ``.smi`` or ``.SDF`` file to store all molecules and IDs.

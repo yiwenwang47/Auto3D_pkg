@@ -2,22 +2,24 @@
 """
 Providing general utilities for working with different formats of molecular files
 """
-import os
 import glob
+import os
 import time
-from collections import defaultdict, OrderedDict
-from tqdm.auto import tqdm
+from collections import OrderedDict, defaultdict
+from typing import Callable, Dict, List, Optional, Tuple, Union
+
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import rdMolAlign, inchi
+from rdkit.Chem import inchi, rdMolAlign
 from rdkit.Chem.rdMolDescriptors import CalcNumUnspecifiedAtomStereoCenters
-from typing import List, Tuple, Dict, Union, Optional, Callable
-from collections import defaultdict
+from tqdm.auto import tqdm
+
 
 def guess_file_type(filename):
     """Returns the extension for the filename"""
-    assert '.' in filename
+    assert "." in filename
     return os.path.splitext(filename)[1][1:]
+
 
 # Functions related to smi files
 def smiles2smi(smiles: List[str], path: str) -> str:
@@ -33,6 +35,7 @@ def smiles2smi(smiles: List[str], path: str) -> str:
             f.write(line)
     return path
 
+
 def report(path: str):
     """Given a smi file, reports the following:
     - number of SMILES
@@ -42,7 +45,7 @@ def report(path: str):
     - number of SMILES with unspecified stereo center
     """
     suppl = Chem.SmilesMolSupplier(path, titleLine=False)
-    c = 0  #count number of SMILES
+    c = 0  # count number of SMILES
     sizes = []
     element_counts = defaultdict(lambda: 0)
     charges = []
@@ -52,49 +55,63 @@ def report(path: str):
     num_unspecified_mols = 0
     for mol in suppl:
         c += 1
-        atoms = [a.GetAtomicNum() for a in mol.GetAtoms()]  #H not included
+        atoms = [a.GetAtomicNum() for a in mol.GetAtoms()]  # H not included
         elements = list(set(atoms))
         sizes.append(len(atoms))
         for e in elements:
             element_counts[e] += 1
-        
+
         charge = Chem.rdmolops.GetFormalCharge(mol)
         charge_counts[charge] += 1
         charges.append(charge)
         if charge != 0:
             num_charged_mols += 1
-        
+
         unspecified_centers = CalcNumUnspecifiedAtomStereoCenters(mol)
         unspecified_atom_centers.append(unspecified_centers)
         if unspecified_centers > 0:
             num_unspecified_mols += 1
-    
+
     print("Total number of SMILES: ", c, flush=True)
-    print(f"SMILES size distribution: mean={str(np.mean(sizes))} std={str(np.std(sizes))} min={str(min(sizes))} max={str(max(sizes))}", flush=True)    
+    print(
+        f"SMILES size distribution: mean={str(np.mean(sizes))} std={str(np.std(sizes))} min={str(min(sizes))} max={str(max(sizes))}",
+        flush=True,
+    )
     print("Breakdown of element types and its prevailance: ", flush=True)
     for e, c_e in sorted(element_counts.items()):
-        print(f"    {str(e)} total: {str(c_e)}  percent: {str(round(c_e/c, 3))}", flush=True)
+        print(
+            f"    {str(e)} total: {str(c_e)}  percent: {str(round(c_e/c, 3))}",
+            flush=True,
+        )
     print(f"Number of charged molecules: {str(num_charged_mols)}", flush=True)
     print("Breakdown of charge distribution", flush=True)
     for charge, c_c in sorted(charge_counts.items()):
-        print(f"    charge={str(charge)} total: {str(c_c)} percent: {str(round(c_c/c, 3))}", flush=True)
-    print(f"Number of molecules with unspecified atomic centers: {str(num_unspecified_mols)}", flush=True)
+        print(
+            f"    charge={str(charge)} total: {str(c_c)} percent: {str(round(c_c/c, 3))}",
+            flush=True,
+        )
+    print(
+        f"Number of molecules with unspecified atomic centers: {str(num_unspecified_mols)}",
+        flush=True,
+    )
+
 
 def combine_smi(smies: List[str], out: str):
     """Combine smi files into a single file"""
     data = []
     for smi in smies:
-        with open(smi, 'r') as f:
+        with open(smi, "r") as f:
             datai = f.readlines()
         data += datai
     data = list(set(data))
-    with open(out, 'w+') as f2:
+    with open(out, "w+") as f2:
         for line in data:
             if not line.isspace():
-                f2.write((line.strip() + '\n'))
+                f2.write((line.strip() + "\n"))
 
-def is_macrocycle(smiles:str, size=10):
-    """Check if a SMIELS contains a macrocycle part (a 10-membered or large 
+
+def is_macrocycle(smiles: str, size=10):
+    """Check if a SMIELS contains a macrocycle part (a 10-membered or large
     ring regardless of their aromaticity and hetero atoms content)"""
     mol = Chem.MolFromSmiles(smiles)
     ring = mol.GetRingInfo()
@@ -104,11 +121,12 @@ def is_macrocycle(smiles:str, size=10):
             return True
     return False
 
+
 def split_smi(smi):
     """Split an input .smi file into two files:
     one contains small SMILES, the other contain macrocycle smiles
     """
-    #Prepare out file path
+    # Prepare out file path
     dir = os.path.dirname(os.path.realpath(smi))
     basename = os.path.basename(smi)
     normal_name = basename.split(".")[0].strip() + "_normal.smi"
@@ -127,10 +145,10 @@ def split_smi(smi):
             macrocycle.append(line)
         else:
             normal.append(line)
-    
+
     l_ = len(normal) + len(macrocycle)
     l = len(data)
-    assert(l == l_)
+    assert l == l_
 
     with open(normal_path, "w+") as f:
         for line in normal:
@@ -140,6 +158,7 @@ def split_smi(smi):
         for line in macrocycle:
             f.write(line)
 
+
 # Functions related to SDF files
 def countSDF(sdf):
     """Counting the number of structures in SDF file"""
@@ -148,7 +167,8 @@ def countSDF(sdf):
     c = len(mols2)
     return c
 
-def SDF2chunks(sdf:str)->List[List[str]]:
+
+def SDF2chunks(sdf: str) -> List[List[str]]:
     """given a sdf file, return a list of chunks,
     each chunk consists of lines of a molecule as they appear in the original file"""
     chunks = []
@@ -163,7 +183,8 @@ def SDF2chunks(sdf:str)->List[List[str]]:
         else:
             chunk.append(line)
     return chunks
-       
+
+
 # Functions related to XYZ files
 def combine_xyz(in_folder, out_path):
     """
@@ -182,32 +203,35 @@ def combine_xyz(in_folder, out_path):
 
     results = []
     for file in files:
-        with open(file, 'r') as f:
+        with open(file, "r") as f:
             data = f.readlines()
-        assert(len(data) == (int(data[0]) + 2))
+        assert len(data) == (int(data[0]) + 2)
         results += data
 
-    with open(out_path, 'w+') as f:
+    with open(out_path, "w+") as f:
         for line in results:
             f.write(line)
     # print(f'Combined in a singl file {out_path}!')
+
 
 # Functions involving multiple molecular file formats
 def to_smiles(path, fomat="sdf"):
     """converting a file from a given format to smi file
     input: path
     format: [optional] sdf
-    
+
     returns: a path of smi file containing the same molecules as in the sdf"""
     suppl = Chem.SDMolSupplier(path)
     smiles = []
     for i, mol in enumerate(suppl):
         name = mol.GetProp("_Name").strip()
-        if len(name) == 0:  #len("") == 0
+        if len(name) == 0:  # len("") == 0
             name = str(i)
-        smiles.append((Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True), name))
-    
-    #write
+        smiles.append(
+            (Chem.MolToSmiles(mol, isomericSmiles=True, canonical=True), name)
+        )
+
+    # write
     folder = os.path.dirname(os.path.abspath(path))
     new_base = os.path.basename(path).split(".")[0].strip() + ".smi"
     new_path = os.path.join(folder, new_base)
@@ -216,18 +240,19 @@ def to_smiles(path, fomat="sdf"):
             f.write(f"{smi} {name}\n")
     return new_path
 
+
 def find_smiles_not_in_sdf(smi, sdf):
     """Find the SMILES who doesn't have a 3D structure in the SDF file
     smi: path to an smi file (the input path for Auto3D)
     sdf: path to an SDF file"""
-    #find all SMILES ids
+    # find all SMILES ids
     smi_names = []
     with open(smi, "r") as f:
         data = f.readlines()
     for line in data:
         smi, id = tuple(line.strip().split())
         smi_names.append((smi.strip(), id.strip()))
-    
+
     sdf_data = []
     mols = Chem.SDMolSupplier(sdf)
     for mol in mols:
@@ -254,17 +279,20 @@ def find_smiles_not_in_sdf(smi, sdf):
         print("Every SMILES has at least an 3D structure in the SDF file.", flush=True)
     return bad
 
+
 def encode_ids(path: str) -> Tuple[str, dict]:
-    '''For a smi/SDF Files, encode the ids into numbers,
-    return the new smi files path and a dictionary containing the mapping'''
+    """For a smi/SDF Files, encode the ids into numbers,
+    return the new smi files path and a dictionary containing the mapping"""
     basename = os.path.basename(path)
     dir = os.path.dirname(os.path.abspath(path))
-    extension = basename.split('.')[-1].strip()
-    new_path = os.path.join(dir, basename.split('.')[0].strip() + '_encoded.' + extension)
+    extension = basename.split(".")[-1].strip()
+    new_path = os.path.join(
+        dir, basename.split(".")[0].strip() + "_encoded." + extension
+    )
 
-    if extension == 'smi':
+    if extension == "smi":
         new_data = []
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             data = f.readlines()
         mapping = {}
         for i, line in enumerate(data):
@@ -273,12 +301,12 @@ def encode_ids(path: str) -> Tuple[str, dict]:
             smi, id = line.strip().split()
             mapping[id] = i
             new_data.append(f"{smi} {i}\n")
-        with open(new_path, 'w') as f:
+        with open(new_path, "w") as f:
             for line in new_data:
                 f.write(line)
         return new_path, mapping
-    
-    elif extension == 'sdf':
+
+    elif extension == "sdf":
         suppl = Chem.SDMolSupplier(path, removeHs=False)
         mapping = {}
         with Chem.SDWriter(new_path) as w:
@@ -292,28 +320,33 @@ def encode_ids(path: str) -> Tuple[str, dict]:
     else:
         raise ValueError("The input file should be either smi or sdf")
 
+
 def decode_ids(path: str, mapping: dict) -> str:
-    '''For an SDF file, decode the ids using the mapping'''
+    """For an SDF file, decode the ids using the mapping"""
     mapping = {v: k for k, v in mapping.items()}
     basename = os.path.basename(path)
     dir = os.path.dirname(os.path.abspath(path))
-    extension = basename.split('.')[-1].strip()
-    new_path = os.path.join(dir,
-                            '_'.join(basename.split('.')[0].strip().split('_')[:-2]) + '_out.' + extension)
-    
+    extension = basename.split(".")[-1].strip()
+    new_path = os.path.join(
+        dir,
+        "_".join(basename.split(".")[0].strip().split("_")[:-2]) + "_out." + extension,
+    )
+
     suppl = Chem.SDMolSupplier(path, removeHs=False)
     with Chem.SDWriter(new_path) as w:
         for mol in suppl:
             name = mol.GetProp("_Name").strip()
-            if '@taut' in name:
-                components = name.split('@taut')
-                new_name = mapping[int(components[0])] + '@taut' + ''.join(components[1:])
+            if "@taut" in name:
+                components = name.split("@taut")
+                new_name = (
+                    mapping[int(components[0])] + "@taut" + "".join(components[1:])
+                )
             else:
                 new_name = mapping[int(name)]
             mol.SetProp("_Name", new_name)
 
-            id = '_'.join(mol.GetProp("ID").strip().split('_')[1:])
-            new_id = new_name + '_' + id
+            id = "_".join(mol.GetProp("ID").strip().split("_")[1:])
+            new_id = new_name + "_" + id
             mol.SetProp("ID", new_id)
 
             w.write(mol)

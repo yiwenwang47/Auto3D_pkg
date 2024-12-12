@@ -1,5 +1,6 @@
 import warnings
-from pkg_resources import get_distribution, DistributionNotFound
+
+from pkg_resources import DistributionNotFound, get_distribution
 
 try:
     __version__ = get_distribution(__name__).version
@@ -9,9 +10,7 @@ except DistributionNotFound:
 with warnings.catch_warnings():
     warnings.simplefilter("ignore")
     try:
-        from openeye import oechem
-        from openeye import oequacpac
-        from openeye import oeomega
+        from openeye import oechem, oeomega, oequacpac
     except:
         warnings.warn("Openeye software is not available.")
 

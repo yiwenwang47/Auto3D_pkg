@@ -46,7 +46,7 @@ from the terminal.
 
 Contents
 ==================
-.. toctree:: 
+.. toctree::
    :maxdepth: 2
 
    installation

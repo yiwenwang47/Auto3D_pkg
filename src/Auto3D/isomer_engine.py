@@ -1,26 +1,31 @@
 #!/usr/bin/env python
-import logging
-import warnings
-import shutil
-import os
-import glob
 import collections
-from send2trash import send2trash
-from rdkit import Chem
-from rdkit.Chem import AllChem
-from rdkit.Chem.EnumerateStereoisomers import EnumerateStereoisomers
-from rdkit.Chem.EnumerateStereoisomers import StereoEnumerationOptions
-from rdkit.Chem.MolStandardize import rdMolStandardize
-from rdkit.Chem import rdMolDescriptors
+import glob
+import logging
+import os
+import shutil
+import warnings
 from typing import Tuple
-from Auto3D.utils import hash_enumerated_smi_IDs, amend_configuration_w
-from Auto3D.utils import remove_enantiomers
-from Auto3D.utils import min_pairwise_distance
+
+from rdkit import Chem
+from rdkit.Chem import AllChem, rdMolDescriptors
+from rdkit.Chem.EnumerateStereoisomers import (
+    EnumerateStereoisomers,
+    StereoEnumerationOptions,
+)
+from rdkit.Chem.MolStandardize import rdMolStandardize
+from send2trash import send2trash
+
+from Auto3D.utils import (
+    amend_configuration_w,
+    hash_enumerated_smi_IDs,
+    min_pairwise_distance,
+    remove_enantiomers,
+)
 from Auto3D.utils_file import combine_smi
+
 try:
-    from openeye import oechem
-    from openeye import oequacpac
-    from openeye import oeomega
+    from openeye import oechem, oeomega, oequacpac
 except:
     pass
 from tqdm.auto import tqdm
@@ -29,13 +34,14 @@ from tqdm.auto import tqdm
 # logger = logging.getLogger("auto3d")
 class tautomer_engine(object):
     """Enemerate possible tautomers for the input_f
-    
+
     Arguments:
         mode: rdkit or oechem
         input_f: smi file
         output: smi file
-        
+
     """
+
     def __init__(self, mode, input_f, out, pKaNorm):
         self.mode = mode
         self.input_f = input_f
@@ -54,9 +60,11 @@ class tautomer_engine(object):
         tautomerOptions = oequacpac.OETautomerOptions()
 
         for mol in ifs.GetOEGraphMols():
-            for tautomer in oequacpac.OEGetReasonableTautomers(mol, tautomerOptions, self.pKaNorm):
+            for tautomer in oequacpac.OEGetReasonableTautomers(
+                mol, tautomerOptions, self.pKaNorm
+            ):
                 oechem.OEWriteMolecule(ofs, tautomer)
-        
+
         # Appending input_f smiles into output
         combine_smi([self.input_f, self.output], self.output)
 
@@ -64,7 +72,7 @@ class tautomer_engine(object):
         """RDKit enumerating tautomers"""
         enumerator = rdMolStandardize.TautomerEnumerator()
         smiles = []
-        with open(self.input_f, 'r') as f:
+        with open(self.input_f, "r") as f:
             data = f.readlines()
             for line in data:
                 line = line.strip().split()
@@ -77,24 +85,28 @@ class tautomer_engine(object):
             tauts = enumerator.Enumerate(mol)
             for taut in tauts:
                 tautomers.append((Chem.MolToSmiles(taut), idx))
-        with open(self.output, 'w+') as f:
+        with open(self.output, "w+") as f:
             for smi_idx in tautomers:
                 smi, idx = smi_idx
-                line = smi.strip() + ' ' + str(idx.strip()) + '\n'
+                line = smi.strip() + " " + str(idx.strip()) + "\n"
                 f.write(line)
 
     def run(self):
-        if self.mode == 'oechem':
+        if self.mode == "oechem":
             self.oe_taut()
-        elif self.mode == 'rdkit':
+        elif self.mode == "rdkit":
             self.rd_taut()
         else:
             raise ValueError(f'{self.mode} must be one of "oechem" or "rdkit".')
 
+
 def is_embedding_difficult(mol: Chem.Mol, numThreads: int) -> bool:
     """Check if embedding is difficult for a molecule"""
-    cids = AllChem.EmbedMultipleConfs(mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=100)
+    cids = AllChem.EmbedMultipleConfs(
+        mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=100
+    )
     return len(cids) < 4
+
 
 class rd_isomer(object):
     """
@@ -109,9 +121,20 @@ class rd_isomer(object):
         max_confs: maximum number of conformers for each smi.
         threshold: Maximum RMSD to be considered as duplicates.
     """
-    def __init__(self, smi, smiles_enumerated, smiles_enumerated_reduced,
-                 smiles_hashed, enumerated_sdf, job_name, max_confs, threshold, np,
-                 flipper=True):
+
+    def __init__(
+        self,
+        smi,
+        smiles_enumerated,
+        smiles_enumerated_reduced,
+        smiles_hashed,
+        enumerated_sdf,
+        job_name,
+        max_confs,
+        threshold,
+        np,
+        flipper=True,
+    ):
         self.input_f = smi
         self.n_conformers = max_confs
         self.enumerate = {}
@@ -119,9 +142,8 @@ class rd_isomer(object):
         self.enumerated_smi_path_reduced = smiles_enumerated_reduced
         self.enumerated_smi_hashed_path = smiles_hashed
         self.enumerated_sdf = enumerated_sdf
-        self.num2sym = {1: 'H', 6: 'C', 8: 'O', 7: 'N',
-                        9: 'F', 16: 'S', 17: 'Cl'}
-        self.rdk_tmp = os.path.join(job_name, 'rdk_tmp')
+        self.num2sym = {1: "H", 6: "C", 8: "O", 7: "N", 9: "F", 16: "S", 17: "Cl"}
+        self.rdk_tmp = os.path.join(job_name, "rdk_tmp")
         os.mkdir(self.rdk_tmp)
         self.threshold = threshold
         self.np = np
@@ -130,7 +152,7 @@ class rd_isomer(object):
     @staticmethod
     def read(input_f):
         outputs = {}
-        with open(input_f, 'r') as f:
+        with open(input_f, "r") as f:
             data = f.readlines()
         for line in data:
             smiles, name = tuple(line.strip().split())
@@ -140,40 +162,50 @@ class rd_isomer(object):
     @staticmethod
     def enumerate_func(mol):
         """Enumerate the R/S and cis/trans isomers
-        
+
         Argument:
             mol: rd mol object
-            
+
         Return:
             isomers: a list of SMILES"""
         opts = StereoEnumerationOptions(unique=True)
         isomers = tuple(EnumerateStereoisomers(mol, options=opts))
-        isomers = sorted(Chem.MolToSmiles(x, isomericSmiles=True, doRandom=False) for x in isomers)
+        isomers = sorted(
+            Chem.MolToSmiles(x, isomericSmiles=True, doRandom=False) for x in isomers
+        )
         return isomers
 
     def write_enumerated_smi(self):
-        with open(self.enumerated_smi_path, 'w+') as f:
+        with open(self.enumerated_smi_path, "w+") as f:
             for name, smi in self.enumerate.items():
                 for i, isomer in enumerate(smi):
-                    new_name = str(name).strip() + '_' + str(i)
-                    line = isomer.strip() + '\t' + new_name + '\n'
+                    new_name = str(name).strip() + "_" + str(i)
+                    line = isomer.strip() + "\t" + new_name + "\n"
                     f.write(line)
 
     def embed_conformer(self, smi: str) -> Chem.Mol:
-        '''Embed conformers for a smi'''
+        """Embed conformers for a smi"""
         mol = Chem.AddHs(Chem.MolFromSmiles(smi))
         if self.n_conformers is None:
             # The formula is based on this paper: https://doi.org/10.1021/acs.jctc.0c01213
             num_rotatable_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
             num_heavy_atoms = mol.GetNumHeavyAtoms()
-            n_conformers = min(max(num_heavy_atoms, int(2 * 8.481 * (num_rotatable_bonds **1.642))), 1000)
+            n_conformers = min(
+                max(num_heavy_atoms, int(2 * 8.481 * (num_rotatable_bonds**1.642))),
+                1000,
+            )
         else:
             n_conformers = self.n_conformers
 
-        AllChem.EmbedMultipleConfs(mol, numConfs=n_conformers,
-                                    randomSeed=42, numThreads=self.np,
-                                    pruneRmsThresh=self.threshold, maxAttempts=100, 
-                                    useRandomCoords=is_embedding_difficult(mol, self.np))
+        AllChem.EmbedMultipleConfs(
+            mol,
+            numConfs=n_conformers,
+            randomSeed=42,
+            numThreads=self.np,
+            pruneRmsThresh=self.threshold,
+            maxAttempts=100,
+            useRandomCoords=is_embedding_difficult(mol, self.np),
+        )
 
         return mol
 
@@ -183,8 +215,13 @@ class rd_isomer(object):
         writes all structures in 'job_name/smiles_enumerated.sdf'
         """
         if self.flipper:
-            print("Enumerating cis/tran isomers for unspecified double bonds...", flush=True)
-            print("Enumerating R/S isomers for unspecified atomic centers...", flush=True)
+            print(
+                "Enumerating cis/tran isomers for unspecified double bonds...",
+                flush=True,
+            )
+            print(
+                "Enumerating R/S isomers for unspecified atomic centers...", flush=True
+            )
             # logger.info("Enumerating cis/tran isomers for unspecified double bonds...")
             # logger.info("Enumerating R/S isomers for unspecified atomic centers...")
             smiles_og = self.read(self.input_f)
@@ -197,12 +234,14 @@ class rd_isomer(object):
             print("Removing enantiomers...", flush=True)
             # logger.info("Removing enantiomers...")
             amend_configuration_w(self.enumerated_smi_path)
-            remove_enantiomers(self.enumerated_smi_path, self.enumerated_smi_path_reduced)
-            hash_enumerated_smi_IDs(self.enumerated_smi_path_reduced,
-                                    self.enumerated_smi_hashed_path)
+            remove_enantiomers(
+                self.enumerated_smi_path, self.enumerated_smi_path_reduced
+            )
+            hash_enumerated_smi_IDs(
+                self.enumerated_smi_path_reduced, self.enumerated_smi_hashed_path
+            )
         else:
-            hash_enumerated_smi_IDs(self.input_f,
-                                    self.enumerated_smi_hashed_path)
+            hash_enumerated_smi_IDs(self.input_f, self.enumerated_smi_hashed_path)
 
         print("Enumerating conformers/rotamers, removing duplicates...", flush=True)
         # logger.info("Enumerating conformers/rotamers, removing duplicates...")
@@ -221,8 +260,8 @@ class rd_isomer(object):
                     positions = mol.GetConformer(i).GetPositions()
                     if min_pairwise_distance(positions) > 0.9:
                         conf_id = name.strip() + f"_{i}"
-                        mol.SetProp('ID', conf_id)
-                        mol.SetProp('_Name', conf_id)
+                        mol.SetProp("ID", conf_id)
+                        mol.SetProp("_Name", conf_id)
                         writer.write(mol, confId=i)
 
         return self.enumerated_sdf
@@ -234,7 +273,10 @@ class rd_isomer_sdf(object):
     The specified stereo centers are preserved as in the input_f file.
     The unspecified stereo centers are enumerated.
     """
-    def __init__(self, sdf: str, enumerated_sdf: str, max_confs:int, threshold:float, np:int):
+
+    def __init__(
+        self, sdf: str, enumerated_sdf: str, max_confs: int, threshold: float, np: int
+    ):
         """
         sdf: the path to the input_f sdf file
         enumerated_sdf: the path to the output sdf file
@@ -252,25 +294,39 @@ class rd_isomer_sdf(object):
         supp = Chem.SDMolSupplier(self.sdf, removeHs=False)
         with Chem.SDWriter(self.enumerated_sdf) as writer:
             for mol in tqdm(supp):
-                #enumerate conformers
+                # enumerate conformers
                 mol2 = Chem.AddHs(mol)
                 if self.n_conformers is None:
                     # n_conformers = min(3 ** num_rotatable_bonds, 100)
 
                     # The formula is based on this paper: https://doi.org/10.1021/acs.jctc.0c01213
                     num_rotatable_bonds = rdMolDescriptors.CalcNumRotatableBonds(mol)
-                    num_heavy_atoms = len([atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1])
-                    n_conformers = min(max(num_heavy_atoms, int(2 * 8.481 * (num_rotatable_bonds **1.642))), 1000)
+                    num_heavy_atoms = len(
+                        [atom for atom in mol.GetAtoms() if atom.GetAtomicNum() > 1]
+                    )
+                    n_conformers = min(
+                        max(
+                            num_heavy_atoms,
+                            int(2 * 8.481 * (num_rotatable_bonds**1.642)),
+                        ),
+                        1000,
+                    )
                 else:
                     n_conformers = self.n_conformers
-                AllChem.EmbedMultipleConfs(mol2, numConfs=n_conformers, randomSeed=42, numThreads=self.np, pruneRmsThresh=self.threshold)
-                #set conformer names
-                name = mol.GetProp('_Name')
+                AllChem.EmbedMultipleConfs(
+                    mol2,
+                    numConfs=n_conformers,
+                    randomSeed=42,
+                    numThreads=self.np,
+                    pruneRmsThresh=self.threshold,
+                )
+                # set conformer names
+                name = mol.GetProp("_Name")
                 for i, conf in enumerate(mol2.GetConformers()):
                     # mol2.ClearProp('ID')
                     # mol2.ClearProp('_Name')
-                    mol2.SetProp('_Name', f'{name}_{i}')
-                    mol2.SetProp('ID', f'{name}_{i}')
+                    mol2.SetProp("_Name", f"{name}_{i}")
+                    mol2.SetProp("ID", f"{name}_{i}")
                     writer.write(mol2, confId=i)
         return self.enumerated_sdf
 
@@ -294,7 +350,18 @@ def oe_flipper(input_f, out):
             enantiomer = oechem.OEMol(enantiomer)
             oechem.OEWriteMolecule(ofs, enantiomer)
 
-def oe_isomer(mode, input_f, smiles_enumerated, smiles_reduced, smiles_hashed, output, max_confs, threshold, flipper=True):
+
+def oe_isomer(
+    mode,
+    input_f,
+    smiles_enumerated,
+    smiles_reduced,
+    smiles_hashed,
+    output,
+    max_confs,
+    threshold,
+    flipper=True,
+):
     """Generating R/S, cis/trans and conformers using omega
     Arguments:
         mode: 'classic', 'macrocycle', 'dense', 'pose', 'rocs' or 'fast_rocs'
@@ -317,27 +384,33 @@ def oe_isomer(mode, input_f, smiles_enumerated, smiles_reduced, smiles_hashed, o
     elif mode == "macrocycle":
         omegaOpts = oeomega.OEMacrocycleOmegaOptions()
     else:
-        raise ValueError(f"mode has to be 'classic' or 'macrocycle', but received {mode}.")
-    omegaOpts.SetParameterVisibility(oechem.OEParamVisibility_Hidden) 
+        raise ValueError(
+            f"mode has to be 'classic' or 'macrocycle', but received {mode}."
+        )
+    omegaOpts.SetParameterVisibility(oechem.OEParamVisibility_Hidden)
     omegaOpts.SetParameterVisibility("-rms", oechem.OEParamVisibility_Simple)
     omegaOpts.SetParameterVisibility("-ewindow", oechem.OEParamVisibility_Simple)
     omegaOpts.SetParameterVisibility("-maxconfs", oechem.OEParamVisibility_Simple)
 
-    if mode == 'macrocycle':
+    if mode == "macrocycle":
         omegaOpts.SetIterCycleSize(1000)
-        omegaOpts.SetMaxIter(2000)   
+        omegaOpts.SetMaxIter(2000)
         omegaOpts.SetMaxConfs(max_confs)
         omegaOpts.SetEnergyWindow(999)
     else:
-        omegaOpts.SetFixRMS(threshold)  #macrocycle mode does not have the attribute 'SetFixRMS'
+        omegaOpts.SetFixRMS(
+            threshold
+        )  # macrocycle mode does not have the attribute 'SetFixRMS'
         omegaOpts.SetStrictStereo(False)
         omegaOpts.SetWarts(True)
         omegaOpts.SetMaxConfs(max_confs)
-        omegaOpts.SetEnergyWindow(999)   
-        omegaOpts.SetRMSRange("0.8, 1.0, 1.2, 1.4")             
+        omegaOpts.SetEnergyWindow(999)
+        omegaOpts.SetRMSRange("0.8, 1.0, 1.2, 1.4")
     # dense, pose, rocs, fast_rocs mdoes use the default parameters from OEOMEGA:
-    # https://docs.eyesopen.com/toolkits/python/omegatk/OEConfGenConstants/OEOmegaSampling.html 
-    opts = oechem.OESimpleAppOptions(omegaOpts, "Omega", oechem.OEFileStringType_Mol, oechem.OEFileStringType_Mol3D)
+    # https://docs.eyesopen.com/toolkits/python/omegatk/OEConfGenConstants/OEOmegaSampling.html
+    opts = oechem.OESimpleAppOptions(
+        omegaOpts, "Omega", oechem.OEFileStringType_Mol, oechem.OEFileStringType_Mol3D
+    )
 
     omegaOpts.UpdateValues(opts)
     if mode == "macrocycle":
@@ -357,8 +430,8 @@ def oe_isomer(mode, input_f, smiles_enumerated, smiles_reduced, smiles_hashed, o
             ifs = oechem.oemolistream()
             ifs.open(input_f)
     elif input_format == "sdf":
-            ifs = oechem.oemolistream()
-            ifs.open(input_f)        
+        ifs = oechem.oemolistream()
+        ifs.open(input_f)
     ofs = oechem.oemolostream()
     ofs.open(output)
 
@@ -369,6 +442,8 @@ def oe_isomer(mode, input_f, smiles_enumerated, smiles_reduced, smiles_hashed, o
         if ret_code == oeomega.OEOmegaReturnCode_Success:
             oechem.OEWriteMolecule(ofs, mol)
         else:
-            oechem.OEThrow.Warning("%s: %s" % (mol.GetTitle(), oeomega.OEGetOmegaError(ret_code)))
+            oechem.OEThrow.Warning(
+                "%s: %s" % (mol.GetTitle(), oeomega.OEGetOmegaError(ret_code))
+            )
 
     return 0

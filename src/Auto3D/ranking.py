@@ -1,19 +1,20 @@
 #!/usr/bin/env python
-'''
+"""
 Finding 3D structures that satisfy the input requirement.
-'''
-import os
+"""
 import logging
+import os
+from typing import List
+
 import pandas as pd
 from rdkit import Chem
-from typing import List
-from Auto3D.utils import filter_unique, check_connectivity
-from Auto3D.utils import hartree2ev, ev2kcalpermol
-
 from tqdm.auto import tqdm
 
+from Auto3D.utils import check_connectivity, ev2kcalpermol, filter_unique, hartree2ev
+
+
 class ranking(object):
-    '''
+    """
     Finding 3D structures that satisfy the user-defined requirements.
 
     Arguments:
@@ -25,33 +26,47 @@ class ranking(object):
                 window (kcal/mol) from the lowest energy
     Returns:
         None
-    '''
-    def __init__(self, input_path,
-                 out_path, threshold, k=False, window=False):
+    """
+
+    def __init__(self, input_path, out_path, threshold, k=False, window=False):
         self.input_path = input_path
         self.out_path = out_path
         self.threshold = threshold
-        self.atomic_number2symbol = {1: 'H', 
-                                     5: 'B', 6: 'C', 7: 'N', 8: 'O', 9: 'F', 
-                                     14: 'Si', 15: 'P', 16: 'S', 17: 'Cl',
-                                     32: 'Ge', 33: 'As', 34: 'Se', 35: 'Br',
-                                     51: 'Sb', 52: 'Te', 53: 'I'}
+        self.atomic_number2symbol = {
+            1: "H",
+            5: "B",
+            6: "C",
+            7: "N",
+            8: "O",
+            9: "F",
+            14: "Si",
+            15: "P",
+            16: "S",
+            17: "Cl",
+            32: "Ge",
+            33: "As",
+            34: "Se",
+            35: "Br",
+            51: "Sb",
+            52: "Te",
+            53: "I",
+        }
         self.k = k
         self.window = window
 
     @staticmethod
     def similar(name, names):
         name2 = name.strip().split("_")[0]
-        names2 = names[0].strip().split('_')[0]
-        return (name2 == names2)
+        names2 = names[0].strip().split("_")[0]
+        return name2 == names2
 
     @staticmethod
     def add_relative_e(list0):
         """Adding relative energies compared with lowest-energy structure
-        
+
         Argument:
             list: a list of tuple (idx, name, energy)
-            
+
         Return:
             list of tuple (idx, name, energy, relative_energy)
         """
@@ -63,9 +78,8 @@ class ranking(object):
             list0_.append((idx_i, name_i, e_i, e_relative))
         return list0_
 
-
-    def top_k(self, df_group: pd.DataFrame, k: int=1) -> List[Chem.Mol]:
-        '''
+    def top_k(self, df_group: pd.DataFrame, k: int = 1) -> List[Chem.Mol]:
+        """
         Select the k structures with the lowest energies for the given molecule.
 
         Args:
@@ -73,11 +87,13 @@ class ranking(object):
             k: the number of structures to be selected
         Returns:
             out_mols: a list of RDKit molecules with the lowest energies
-        '''
+        """
         names = list(df_group["name"])
-        assert(len(set(names)) == 1)
+        assert len(set(names)) == 1
 
-        group = df_group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
+        group = df_group.sort_values(by=["energy"], ascending=True).reset_index(
+            drop=True
+        )
         out_mols = filter_unique(list(group["mol"]), threshold=self.threshold, k=k)
 
         if len(out_mols) == 0:
@@ -85,33 +101,34 @@ class ranking(object):
             print(f"No structure converged for {name}.", flush=True)
             logging.info(f"No structure converged for {name}.")
         else:
-            #Adding relative energies
-            ref_energy = float(out_mols[0].GetProp('E_tot'))
+            # Adding relative energies
+            ref_energy = float(out_mols[0].GetProp("E_tot"))
             for mol in out_mols:
-                my_energy = float(mol.GetProp('E_tot'))
+                my_energy = float(mol.GetProp("E_tot"))
                 rel_energy = my_energy - ref_energy
-                mol.SetProp('E_rel(eV)', str(rel_energy))
+                mol.SetProp("E_rel(eV)", str(rel_energy))
         return out_mols
 
-
-    def top_window(self, df_group: pd.DataFrame, window: float=1.0) -> List[Chem.Mol]:
-        '''
+    def top_window(self, df_group: pd.DataFrame, window: float = 1.0) -> List[Chem.Mol]:
+        """
         Given a group of energy_name_idxes,
         return all (idx, name, e) tuples whose energies are within
-        window (Hatree) from the lowest energy. Unit table is based on: 
+        window (Hatree) from the lowest energy. Unit table is based on:
         http://wild.life.nctu.edu.tw/class/common/energy-unit-conv-table.html
-        '''
-        window = (window/ev2kcalpermol)  # convert energy window into eV unit
+        """
+        window = window / ev2kcalpermol  # convert energy window into eV unit
         names = list(df_group["name"])
-        assert(window >= 0)
-        assert(len(set(names)) == 1)
+        assert window >= 0
+        assert len(set(names)) == 1
 
-        group = df_group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
-        minimum = group['energy'].min()
+        group = df_group.sort_values(by=["energy"], ascending=True).reset_index(
+            drop=True
+        )
+        minimum = group["energy"].min()
         maximum = window + minimum
-        group = group.loc[group['energy'] <= maximum]
+        group = group.loc[group["energy"] <= maximum]
 
-        out_mols_ = filter_unique(list(group['mols']), self.threshold)
+        out_mols_ = filter_unique(list(group["mols"]), self.threshold)
         out_mols = []
 
         if len(out_mols_) == 0:
@@ -121,9 +138,9 @@ class ranking(object):
         else:
             ref_energy = minimum
             for mol in out_mols_:
-                my_energy = float(mol.GetProp('E_tot'))
+                my_energy = float(mol.GetProp("E_tot"))
                 rel_energy = my_energy - ref_energy
-                mol.SetProp('E_rel(eV)', str(rel_energy))
+                mol.SetProp("E_rel(eV)", str(rel_energy))
                 out_mols.append(mol)
         return out_mols
 
@@ -138,34 +155,47 @@ class ranking(object):
         data2 = Chem.SDMolSupplier(self.input_path, removeHs=False)
         mols, names, energies = [], [], []
         for mol in data2:
-            if (mol is not None) and (mol.GetProp('Converged').lower() == 'true') and check_connectivity(mol): # Verify convergence and correct connectivity
+            if (
+                (mol is not None)
+                and (mol.GetProp("Converged").lower() == "true")
+                and check_connectivity(mol)
+            ):  # Verify convergence and correct connectivity
                 mols.append(mol)
-                names.append(mol.GetProp('_Name').strip().split("_")[0].strip())
-                energies.append(float(mol.GetProp('E_tot')))
-        
+                names.append(mol.GetProp("_Name").strip().split("_")[0].strip())
+                energies.append(float(mol.GetProp("E_tot")))
+
         df = pd.DataFrame({"name": names, "energy": energies, "mol": mols})
 
         df2 = df.groupby("name")
-        for group_name in tqdm(df2.indices):
+        for group_name in df2.indices:
             group = df2.get_group(group_name)
-            group = group.sort_values(by=['energy'], ascending=True).reset_index(drop=True)
+            group = group.sort_values(by=["energy"], ascending=True).reset_index(
+                drop=True
+            )
             if self.k:
                 top_results = self.top_k(group, self.k)
             elif self.window:
                 top_results = self.top_window(group, self.window)
             else:
-                raise ValueError(('Parameter k or window needs to be '
-                                    'specified. Append "--k=1" if you'
-                                    'only want one structure per SMILES'))
+                raise ValueError(
+                    (
+                        "Parameter k or window needs to be "
+                        'specified. Append "--k=1" if you'
+                        "only want one structure per SMILES"
+                    )
+                )
             results += top_results
 
         with Chem.SDWriter(self.out_path) as f:
             for mol in results:
                 # Change the energy unit from eV back to Hartree
-                mol.SetProp('E_tot', str(float(mol.GetProp('E_tot'))/hartree2ev))
-                mol.SetProp('E_rel(kcal/mol)', str(float(mol.GetProp('E_rel(eV)')) * ev2kcalpermol))
-                mol.ClearProp('E_rel(eV)')
-                #Remove _ in the molecule title
+                mol.SetProp("E_tot", str(float(mol.GetProp("E_tot")) / hartree2ev))
+                mol.SetProp(
+                    "E_rel(kcal/mol)",
+                    str(float(mol.GetProp("E_rel(eV)")) * ev2kcalpermol),
+                )
+                mol.ClearProp("E_rel(eV)")
+                # Remove _ in the molecule title
                 t = mol.GetProp("_Name")
                 t_simplified = t.split("_")[0].strip()
                 mol.SetProp("_Name", t_simplified)
