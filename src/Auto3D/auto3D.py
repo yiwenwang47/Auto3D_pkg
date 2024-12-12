@@ -421,7 +421,7 @@ def main(args:dict):
                  The reason might be one of the following: 
                  1. Allocated memory is not enough;
                  2. The input SMILES encodes invalid chemical structures;
-                 3. Patience is too small"""
+                 3. Patience is too small."""
         sys.exit(msg)
     for file in files:
         with open(file, "r") as f:
@@ -453,7 +453,7 @@ def main(args:dict):
     print(f"Output path: {path_output}", flush=True)
     logger.info(f"Output path: {path_output}")
     logging_queue.put(None)
-    time.sleep(3)  #wait the daemon process for 3 seconds
+    time.sleep(3)  #wait for the daemon process for 3 seconds
     return path_output
 
 def smiles2mols(smiles: List[str], args:dict) -> List[Chem.Mol]:
