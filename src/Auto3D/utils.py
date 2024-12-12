@@ -17,11 +17,8 @@ from tqdm.auto import tqdm
 import numpy as np
 from io import StringIO
 from rdkit import Chem
-from rdkit.Chem import rdMolTransforms
-from rdkit.Chem import rdMolAlign, inchi
-from rdkit.Chem.rdMolDescriptors import CalcNumAtomStereoCenters
-from rdkit.Chem.rdMolDescriptors import CalcNumUnspecifiedAtomStereoCenters
-from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import rdMolTransforms, rdMolAlign, inchi, rdDetermineBonds
+from rdkit.Chem.rdMolDescriptors import CalcNumAtomStereoCenters, CalcNumUnspecifiedAtomStereoCenters
 from typing import List, Tuple, Dict, Union, Optional, Callable
 from Auto3D.utils_file import guess_file_type
 
@@ -389,44 +386,57 @@ def remove_enantiomers(inpath, out):
                 f.write(line)
     return smiles
 
-def check_connectivity(mol:Chem.Mol) -> bool:
-    """Check if there is a new bond formed or a bond broken in the molecule"""
-    # Initialize UFF bond radii (Rappe et al. JACS 1992)
-    # Units of angstroms 
-    # These radii neglect the bond-order and electronegativity corrections in the original paper. Where several values exist for the same atom, the largest was used. 
-    Radii = {1:0.354, 
-             5:0.838, 6:0.757, 7:0.700,  8:0.658,  9:0.668,
-             14:1.117, 15:1.117, 16:1.064, 17:1.044,
-             32: 1.197, 33:1.211, 34:1.190, 35:1.192,
-             51:1.407, 52:1.386,  53:1.382}
 
-    atoms = [atom for atom in mol.GetAtoms()]
-    n = len(atoms)
-    for i in range(n):
-        for j in range(i+1, n, 1):
-            atom_i = atoms[i]
-            atom_i_idx = atom_i.GetIdx()
-            atomic_num_i = atom_i.GetAtomicNum()
-            pos_i = mol.GetConformer().GetAtomPosition(atom_i_idx)
+def check_connectivity(mol: Chem.Mol) -> bool:
+    r"""
+    Check if there is a new bond formed or a bond broken in the molecule.
+    https://github.com/jensengroup/xyz2mol
+    """
+  
+    block = Chem.MolToXYZBlock(mol, confId=0)
+    new_mol = Chem.MolFromXYZBlock(block)
+    rdDetermineBonds.DetermineConnectivity(new_mol)
+    adjacency_matrix, adjacency_matrix_new = Chem.GetAdjacencyMatrix(mol), Chem.GetAdjacencyMatrix(new_mol)
+    return np.allclose(adjacency_matrix, adjacency_matrix_new, atol=1e-1)
 
-            atom_j = atoms[j]
-            atom_j_idx = atom_j.GetIdx()
-            atomic_num_j = atom_j.GetAtomicNum()
-            pos_j = mol.GetConformer().GetAtomPosition(atom_j_idx)
+# def check_connectivity(mol:Chem.Mol) -> bool:
+#     """Check if there is a new bond formed or a bond broken in the molecule"""
+#     # Initialize UFF bond radii (Rappe et al. JACS 1992)
+#     # Units of angstroms 
+#     # These radii neglect the bond-order and electronegativity corrections in the original paper. Where several values exist for the same atom, the largest was used. 
+#     Radii = {1:0.354, 
+#              5:0.838, 6:0.757, 7:0.700,  8:0.658,  9:0.668,
+#              14:1.117, 15:1.117, 16:1.064, 17:1.044,
+#              32: 1.197, 33:1.211, 34:1.190, 35:1.192,
+#              51:1.407, 52:1.386,  53:1.382}
 
-            bond = mol.GetBondBetweenAtoms(atom_i_idx, atom_j_idx)
-            reference_length = Radii[atomic_num_i] + Radii[atomic_num_j]
-            if bond:
-                # make sure the bond is not broken
-                length = rdMolTransforms.GetBondLength(mol.GetConformers()[0], atom_i_idx, atom_j_idx)
-                if length > reference_length * 1.25:
-                    return False
-            else:
-                # make sure the bond is not formed
-                dist = np.linalg.norm(np.array(pos_i) - np.array(pos_j))
-                if dist < reference_length * 1.1:
-                    return False
-    return True
+#     atoms = [atom for atom in mol.GetAtoms()]
+#     n = len(atoms)
+#     for i in range(n):
+#         for j in range(i+1, n, 1):
+#             atom_i = atoms[i]
+#             atom_i_idx = atom_i.GetIdx()
+#             atomic_num_i = atom_i.GetAtomicNum()
+#             pos_i = mol.GetConformer().GetAtomPosition(atom_i_idx)
+
+#             atom_j = atoms[j]
+#             atom_j_idx = atom_j.GetIdx()
+#             atomic_num_j = atom_j.GetAtomicNum()
+#             pos_j = mol.GetConformer().GetAtomPosition(atom_j_idx)
+
+#             bond = mol.GetBondBetweenAtoms(atom_i_idx, atom_j_idx)
+#             reference_length = Radii[atomic_num_i] + Radii[atomic_num_j]
+#             if bond:
+#                 # make sure the bond is not broken
+#                 length = rdMolTransforms.GetBondLength(mol.GetConformers()[0], atom_i_idx, atom_j_idx)
+#                 if length > reference_length * 1.25:
+#                     return False
+#             else:
+#                 # make sure the bond is not formed
+#                 dist = np.linalg.norm(np.array(pos_i) - np.array(pos_j))
+#                 if dist < reference_length * 1.1:
+#                     return False
+#     return True
 
 
 
@@ -439,16 +449,6 @@ def filter_unique(mols, crit=0.3):
     Returns:
         unique_mols: unique molecules
     """
-
-    #Remove unconverged structures
-    mols_ = []
-    for mol in mols:
-        # convergence_flag = str(mol.data['Converged']).lower() == "true"
-        convergence_flag = mol.GetProp('Converged').lower() == "true"
-        has_valid_bonds = check_connectivity(mol)
-        if convergence_flag and has_valid_bonds:
-            mols_.append(mol)
-    mols = mols_
 
     #Remove similar structures
     unique_mols = []

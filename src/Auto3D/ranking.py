@@ -7,9 +7,10 @@ import logging
 import pandas as pd
 from rdkit import Chem
 from typing import List
-from Auto3D.utils import filter_unique
+from Auto3D.utils import filter_unique, check_connectivity
 from Auto3D.utils import hartree2ev, ev2kcalpermol
 
+from tqdm.auto import tqdm
 
 class ranking(object):
     '''
@@ -135,15 +136,16 @@ class ranking(object):
 
         data2 = Chem.SDMolSupplier(self.input_path, removeHs=False)
         mols, names, energies = [], [], []
-        for mol in data2:
-            if (mol is not None) and (mol.GetProp('Converged').lower() == 'true'):
+        for mol in tqdm(data2):
+            if (mol is not None) and (mol.GetProp('Converged').lower() == 'true') and check_connectivity(mol): # Verify convergence and correct connectivity
                 mols.append(mol)
                 names.append(mol.GetProp('_Name').strip().split("_")[0].strip())
                 energies.append(float(mol.GetProp('E_tot')))
-
+        
         df = pd.DataFrame({"names": names, "energies": energies, "mols": mols})
+
         df2 = df.groupby("names")
-        for group_name in df2.indices:
+        for group_name in tqdm(df2.indices):
             group = df2.get_group(group_name)
 
             if self.k:
@@ -157,7 +159,7 @@ class ranking(object):
             results += top_results
 
         with Chem.SDWriter(self.out_path) as f:
-            for mol in results:
+            for mol in tqdm(results):
                 # Change the energy unit from eV back to Hartree
                 mol.SetProp('E_tot', str(float(mol.GetProp('E_tot'))/hartree2ev))
                 mol.SetProp('E_rel(kcal/mol)', str(float(mol.GetProp('E_rel(eV)')) * ev2kcalpermol))
