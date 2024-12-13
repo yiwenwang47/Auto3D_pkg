@@ -103,7 +103,7 @@ class tautomer_engine(object):
 def is_embedding_difficult(mol: Chem.Mol, numThreads: int) -> bool:
     """Check if embedding is difficult for a molecule"""
     cids = AllChem.EmbedMultipleConfs(
-        mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=100
+        mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=10
     )
     return len(cids) < 4
 
