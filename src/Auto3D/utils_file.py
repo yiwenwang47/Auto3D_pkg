@@ -174,6 +174,7 @@ def SDF2chunks(sdf: str) -> List[List[str]]:
     chunks = []
     with open(sdf, "r") as f:
         data = f.readlines()
+        f.close()
     chunk = []
     for line in data:
         if line.strip() == "$$$$":

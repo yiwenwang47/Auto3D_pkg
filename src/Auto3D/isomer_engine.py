@@ -19,6 +19,7 @@ from send2trash import send2trash
 from Auto3D.utils import (
     amend_configuration_w,
     hash_enumerated_smi_IDs,
+    hash_taut_smi,
     min_pairwise_distance,
     remove_enantiomers,
 )
@@ -318,6 +319,7 @@ class rd_isomer_sdf(object):
                     randomSeed=42,
                     numThreads=self.np,
                     pruneRmsThresh=self.threshold,
+                    maxAttempts=10,
                 )
                 # set conformer names
                 name = mol.GetProp("_Name")
@@ -355,7 +357,6 @@ def oe_isomer(
     input_f,
     smiles_enumerated,
     smiles_reduced,
-    smiles_hashed,
     output,
     max_confs,
     threshold,
@@ -446,3 +447,72 @@ def oe_isomer(
             )
 
     return 0
+
+
+def _handle_tautomers(path, meta, config, logger):
+    output_taut = meta["output_taut"]
+    taut_mode = config.tauto_engine
+    print("Enumerating tautomers for the input...", end="", flush=True)
+    logger.info("Enumerating tautomers for the input...")
+    taut_engine = tautomer_engine(taut_mode, path, output_taut, config.pKaNorm)
+    taut_engine.run()
+    hash_taut_smi(output_taut, output_taut)
+    print(f"Tautomers are saved in {output_taut}", flush=True)
+    logger.info(f"Tautomers are saved in {output_taut}")
+    return output_taut
+
+
+def _generate_isomers_as_sdf(path, directory, meta, config):
+    smiles_enumerated = meta["smiles_enumerated"]
+    smiles_reduced = meta["smiles_reduced"]
+    smiles_hashed = meta["smiles_hashed"]
+    enumerated_sdf = meta["enumerated_sdf"]
+    max_confs = config.max_confs
+    duplicate_threshold = config.threshold
+    mpi_np = config.mpi_np
+    enumerate_isomer = config.enumerate_isomer
+    isomer_program = config.isomer_engine
+    # Isomer enumeration step
+    if isomer_program == "omega":
+        mode_oe = config.mode_oe
+        oe_isomer(
+            mode=mode_oe,
+            input_f=path,
+            smiles_enumerated=smiles_enumerated,
+            smiles_reduced=smiles_reduced,
+            output=enumerated_sdf,
+            max_confs=max_confs,
+            threshold=duplicate_threshold,
+            flipper=enumerate_isomer,
+        )
+    elif isomer_program == "rdkit":
+        if config.input_format == "smi":
+            engine = rd_isomer(
+                smi=path,
+                smiles_enumerated=smiles_enumerated,
+                smiles_enumerated_reduced=smiles_reduced,
+                smiles_hashed=smiles_hashed,
+                enumerated_sdf=enumerated_sdf,
+                job_name=directory,
+                max_confs=max_confs,
+                threshold=duplicate_threshold,
+                np=mpi_np,
+                flipper=enumerate_isomer,
+            )
+        elif config.input_format == "sdf":
+            engine = rd_isomer_sdf(
+                sdf=path,
+                enumerated_sdf=enumerated_sdf,
+                max_confs=max_confs,
+                threshold=duplicate_threshold,
+                np=mpi_np,
+            )
+        engine.run()
+    else:
+        raise ValueError(
+            'The isomer enumeration engine must be "omega" or "rdkit", '
+            f"but {config.isomer_engine} was parsed. "
+            "You can set the parameter by appending the following:"
+            "--isomer_engine=rdkit"
+        )
+    return enumerated_sdf

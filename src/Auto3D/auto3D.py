@@ -25,15 +25,15 @@ from send2trash import send2trash
 
 import Auto3D
 from Auto3D.batch_opt.batchopt import optimizing
-from Auto3D.isomer_engine import oe_isomer, rd_isomer, rd_isomer_sdf, tautomer_engine
-from Auto3D.ranking import ranking
-from Auto3D.utils import (
-    check_input,
-    create_chunk_meta_names,
-    hash_taut_smi,
-    housekeeping,
-    reorder_sdf,
+from Auto3D.isomer_engine import (
+    _generate_isomers_as_sdf,
+    _handle_tautomers,
+    oe_isomer,
+    rd_isomer,
+    rd_isomer_sdf,
 )
+from Auto3D.ranking import ranking
+from Auto3D.utils import check_input, create_chunk_meta_names, housekeeping, reorder_sdf
 from Auto3D.utils_file import SDF2chunks, decode_ids, encode_ids, smiles2smi
 
 try:
@@ -45,6 +45,13 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 
+def _prepare_logger(logging_queue):
+    logger = logging.getLogger("auto3d")
+    logger.addHandler(QueueHandler(logging_queue))
+    logger.setLevel(logging.INFO)
+    return logger
+
+
 def isomer_wraper(chunk_info, config_main, queue, logging_queue):
     """
     chunk_info: (path, dir) tuple for the chunk
@@ -52,84 +59,23 @@ def isomer_wraper(chunk_info, config_main, queue, logging_queue):
     queue: mp.queue
     logging_queue
     """
-    # prepare logging
-    logger = logging.getLogger("auto3d")
-    logger.addHandler(QueueHandler(logging_queue))
-    logger.setLevel(logging.INFO)
+    logger = _prepare_logger(logging_queue)
 
     for i, path_dir in enumerate(chunk_info):
         print(f"\n\nIsomer generation for job{i+1}", flush=True)
         logger.info(f"\n\nIsomer generation for job{i+1}")
-        path, dir = path_dir
-        meta = create_chunk_meta_names(path, dir)
-
+        path, directory = path_dir
+        meta = create_chunk_meta_names(path, directory)
         # Tautomer enumeratioin
         if config_main.enumerate_tautomer:
-            output_taut = meta["output_taut"]
-            taut_mode = config_main.tauto_engine
-            print("Enumerating tautomers for the input...", end="")
-            logger.info("Enumerating tautomers for the input...")
-            taut_engine = tautomer_engine(
-                taut_mode, path, output_taut, config_main.pKaNorm
+            path = _handle_tautomers(
+                path=path, meta=meta, config=config_main, logger=logger
             )
-            taut_engine.run()
-            hash_taut_smi(output_taut, output_taut)
-            path = output_taut
-            print(f"Tautomers are saved in {output_taut}", flush=True)
-            logger.info(f"Tautomers are saved in {output_taut}")
+        enumerated_sdf = _generate_isomers_as_sdf(
+            path=path, directory=directory, meta=meta, config=config_main
+        )
 
-        smiles_enumerated = meta["smiles_enumerated"]
-        smiles_reduced = meta["smiles_reduced"]
-        smiles_hashed = meta["smiles_hashed"]
-        enumerated_sdf = meta["enumerated_sdf"]
-        max_confs = config_main.max_confs
-        duplicate_threshold = config_main.threshold
-        mpi_np = config_main.mpi_np
-        enumerate_isomer = config_main.enumerate_isomer
-        isomer_program = config_main.isomer_engine
-        # Isomer enumeration step
-        if isomer_program == "omega":
-            mode_oe = config_main.mode_oe
-            oe_isomer(
-                mode_oe,
-                path,
-                smiles_enumerated,
-                smiles_reduced,
-                smiles_hashed,
-                enumerated_sdf,
-                max_confs,
-                duplicate_threshold,
-                enumerate_isomer,
-            )
-        elif isomer_program == "rdkit":
-            if config_main.input_format == "smi":
-                engine = rd_isomer(
-                    path,
-                    smiles_enumerated,
-                    smiles_reduced,
-                    smiles_hashed,
-                    enumerated_sdf,
-                    dir,
-                    max_confs,
-                    duplicate_threshold,
-                    mpi_np,
-                    enumerate_isomer,
-                )
-                engine.run()
-            elif config_main.input_format == "sdf":
-                engine = rd_isomer_sdf(
-                    path, enumerated_sdf, max_confs, duplicate_threshold, mpi_np
-                )
-                engine.run()
-        else:
-            raise ValueError(
-                'The isomer enumeration engine must be "omega" or "rdkit", '
-                f"but {config_main.isomer_engine} was parsed. "
-                "You can set the parameter by appending the following:"
-                "--isomer_engine=rdkit"
-            )
-
-        queue.put((enumerated_sdf, path, dir, i + 1))
+        queue.put((enumerated_sdf, path, directory, i + 1))
     if isinstance(config_main.gpu_idx, int) or len(config_main.gpu_idx) == 1:
         queue.put("Done")
     else:
@@ -138,22 +84,20 @@ def isomer_wraper(chunk_info, config_main, queue, logging_queue):
 
 
 def optim_rank_wrapper(
-    config_main, queue, logging_queue, gpu_idx: int
+    config_main, queue, logging_queue, device: torch.device
 ) -> List[Chem.Mol]:
-    # prepare logging
-    logger = logging.getLogger("auto3d")
-    logger.addHandler(QueueHandler(logging_queue))
-    logger.setLevel(logging.INFO)
+
+    logger = _prepare_logger(logging_queue)
 
     conformers = []
     while True:
         sdf_path_dir_job = queue.get()
         if sdf_path_dir_job == "Done":
             break
-        enumerated_sdf, path, dir, job = sdf_path_dir_job
-        print(f"\n\nOptimizing on job{job}", flush=True)
-        logger.info(f"\n\nOptimizing on job{job}")
-        meta = create_chunk_meta_names(path, dir)
+        enumerated_sdf, path, directory, job = sdf_path_dir_job
+        print(f"\n\nOptimizing conformers for job{job}", flush=True)
+        logger.info(f"\n\nOptimizing conformers for job{job}")
+        meta = create_chunk_meta_names(path, directory)
 
         # Optimizing step
         config = {
@@ -164,10 +108,7 @@ def optim_rank_wrapper(
         }
         optimized_og = meta["optimized_og"]
         optimizing_engine = config_main.optimizing_engine
-        if config_main.use_gpu:
-            device = torch.device(f"cuda:{gpu_idx}")
-        else:
-            device = torch.device("cpu")
+
         optimizer = optimizing(
             enumerated_sdf, optimized_og, optimizing_engine, device, config
         )
@@ -186,7 +127,7 @@ def optim_rank_wrapper(
         # Housekeeping
         housekeeping_folder = meta["housekeeping_folder"]
         os.mkdir(housekeeping_folder)
-        housekeeping(dir, housekeeping_folder, output)
+        housekeeping(directory, housekeeping_folder, output)
         # Conpress verbose folder
         housekeeping_folder_gz = housekeeping_folder + ".tar.gz"
         with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
@@ -275,6 +216,9 @@ class Config:
         self.mode_oe = self.mode_oe.lower()
 
 
+_allowed_args = list(Config.__annotations__.keys())
+
+
 def logger_process(queue, logging_path):
     """A child process for logging all information from other processes"""
     logger = logging.getLogger("auto3d")
@@ -287,6 +231,15 @@ def logger_process(queue, logging_path):
         logger.handle(message)
 
 
+def _create_config(**kwargs):
+    for key in kwargs:
+        if key not in _allowed_args:
+            raise ValueError(
+                f"Unknown parameter: {key}. Has to be one of {_allowed_args}."
+            )
+    return Config(**kwargs)
+
+
 def _prep_work(**kwargs):
     # Make sure the spawn method is used
     try:
@@ -294,9 +247,7 @@ def _prep_work(**kwargs):
     except RuntimeError:
         pass
 
-    config = Config(
-        **{key: kwargs[key] for key in kwargs if key in Config.__annotations__}
-    )
+    config = _create_config(**kwargs)
 
     if config.path is None:
         sys.exit("Please specify the input file path.")
@@ -382,7 +333,7 @@ def _divide_jobs_based_on_memory(config):
     else:
         if config.use_gpu:
             if isinstance(config.gpu_idx, int):
-                gpu_idx = int(config.gpu_idx)
+                gpu_idx = config.gpu_idx
             else:
                 gpu_idx = config.gpu_idx[0]
                 num_jobs = len(config.gpu_idx)
@@ -455,8 +406,8 @@ def main(**kwargs):
         **kwargs
     )
     config = _divide_jobs_based_on_memory(config)
-    start = time.time()
     chunk_info = _save_chunks(config, logger, job_name, path0)
+    start = time.time()
 
     # Starting the processes
     p1 = mp.Process(
@@ -472,6 +423,10 @@ def main(**kwargs):
     if isinstance(config.gpu_idx, int):
         config.gpu_idx = [config.gpu_idx]
     for idx in config.gpu_idx:
+        if config.use_gpu:
+            device = torch.device(f"cuda:{idx}")
+        else:
+            device = torch.device("cpu")
         p2s.append(
             mp.Process(
                 target=optim_rank_wrapper,
@@ -479,7 +434,7 @@ def main(**kwargs):
                     "config_main": config,
                     "queue": chunk_line,
                     "logging_queue": logging_queue,
-                    "gpu_idx": idx,
+                    "device": device,
                 },
             )
         )
