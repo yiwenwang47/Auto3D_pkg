@@ -106,28 +106,29 @@ def optim_rank_wrapper(
             "patience": config_main.patience,
             "batchsize_atoms": config_main.batchsize_atoms,
         }
-        optimized_og = meta["optimized_og"]
-        optimizing_engine = config_main.optimizing_engine
-
         optimizer = optimizing(
-            enumerated_sdf, optimized_og, optimizing_engine, device, config
+            in_f=enumerated_sdf,
+            out_f=meta["optimized_og"],
+            name=config_main.optimizing_engine,
+            device=device,
+            config=config,
         )
         optimizer.run()
 
         # Ranking step
-        output = meta["output"]
-        duplicate_threshold = config_main.threshold
-        k = config_main.k
-        window = config_main.window
         rank_engine = ranking(
-            optimized_og, output, duplicate_threshold, k=k, window=window
+            input_path=meta["optimized_og"],
+            out_path=meta["output"],
+            threshold=config_main.threshold,
+            k=config_main.k,
+            window=config_main.window,
         )
         conformers.append(rank_engine.run())
 
         # Housekeeping
         housekeeping_folder = meta["housekeeping_folder"]
         os.mkdir(housekeeping_folder)
-        housekeeping(directory, housekeeping_folder, output)
+        housekeeping(directory, housekeeping_folder, meta["output"])
         # Conpress verbose folder
         housekeeping_folder_gz = housekeeping_folder + ".tar.gz"
         with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
