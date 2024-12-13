@@ -204,7 +204,6 @@ class rd_isomer(object):
             numThreads=self.np,
             pruneRmsThresh=self.threshold,
             maxAttempts=10,
-            useRandomCoords=is_embedding_difficult(mol, self.np),
         )
 
         return mol
