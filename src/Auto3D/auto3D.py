@@ -32,7 +32,6 @@ from Auto3D.utils import (
     create_chunk_meta_names,
     hash_taut_smi,
     housekeeping,
-    my_name_space,
     reorder_sdf,
 )
 from Auto3D.utils_file import SDF2chunks, decode_ids, encode_ids, smiles2smi

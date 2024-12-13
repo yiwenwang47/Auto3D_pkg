@@ -12,7 +12,6 @@ import Auto3D
 from Auto3D.auto3D import main, options, smiles2mols
 from Auto3D.ranking import ranking
 from Auto3D.tautomer import get_stable_tautomers
-from Auto3D.utils import my_name_space
 from Auto3D.utils_file import find_smiles_not_in_sdf
 
 if __name__ == "__main__":
