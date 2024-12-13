@@ -157,15 +157,11 @@ def optim_rank_wrapper(
         meta = create_chunk_meta_names(path, dir)
 
         # Optimizing step
-        opt_steps = config_main.opt_steps
-        opt_tol = config_main.convergence_threshold
-        patience = config_main.patience
-        batchsize_atoms = config_main.batchsize_atoms
         config = {
-            "opt_steps": opt_steps,
-            "opttol": opt_tol,
-            "patience": patience,
-            "batchsize_atoms": batchsize_atoms,
+            "opt_steps": config_main.opt_steps,
+            "opttol": config_main.convergence_threshold,
+            "patience": config_main.patience,
+            "batchsize_atoms": config_main.batchsize_atoms,
         }
         optimized_og = meta["optimized_og"]
         optimizing_engine = config_main.optimizing_engine
@@ -462,8 +458,6 @@ def main(**kwargs):
     config = _divide_jobs_based_on_memory(config)
     start = time.time()
     chunk_info = _save_chunks(config, logger, job_name, path0)
-
-    print(chunk_info)
 
     # Starting the processes
     p1 = mp.Process(
