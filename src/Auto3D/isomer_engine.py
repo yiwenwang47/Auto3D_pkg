@@ -449,7 +449,7 @@ def oe_isomer(
     return 0
 
 
-def _handle_tautomers(path, meta, config, logger):
+def handle_tautomers(path, meta, config, logger):
     output_taut = meta["output_taut"]
     taut_mode = config.tauto_engine
     print("Enumerating tautomers for the input...", end="", flush=True)
@@ -462,7 +462,7 @@ def _handle_tautomers(path, meta, config, logger):
     return output_taut
 
 
-def _generate_isomers_as_sdf(path, directory, meta, config):
+def generate_isomers_as_sdf(path, directory, meta, config):
     smiles_enumerated = meta["smiles_enumerated"]
     smiles_reduced = meta["smiles_reduced"]
     smiles_hashed = meta["smiles_hashed"]

@@ -26,8 +26,8 @@ from send2trash import send2trash
 import Auto3D
 from Auto3D.batch_opt.batchopt import optimizing
 from Auto3D.isomer_engine import (
-    _generate_isomers_as_sdf,
-    _handle_tautomers,
+    generate_isomers_as_sdf,
+    handle_tautomers,
     oe_isomer,
     rd_isomer,
     rd_isomer_sdf,
@@ -68,10 +68,10 @@ def isomer_wraper(chunk_info, config_main, queue, logging_queue):
         meta = create_chunk_meta_names(path, directory)
         # Tautomer enumeratioin
         if config_main.enumerate_tautomer:
-            path = _handle_tautomers(
+            path = handle_tautomers(
                 path=path, meta=meta, config=config_main, logger=logger
             )
-        enumerated_sdf = _generate_isomers_as_sdf(
+        enumerated_sdf = generate_isomers_as_sdf(
             path=path, directory=directory, meta=meta, config=config_main
         )
 
@@ -250,6 +250,7 @@ def _prep_work(**kwargs):
 
     config = _create_config(**kwargs)
 
+    # Some initial checks
     if config.path is None:
         sys.exit("Please specify the input file path.")
     path0, mapping = encode_ids(config.path)
@@ -264,13 +265,16 @@ def _prep_work(**kwargs):
             "Either k or window needs to be specified. "
             "Usually, setting '--k=1' satisfies most needs."
         )
+
+    # Create job_name based on the current time
     if config.job_name == "":
         config.job_name = datetime.now().strftime(
             "%Y%m%d-%H%M%S-%f"
         )  # adds microsecond at the end
     job_name = config.job_name
 
-    chunk_line = mp.Manager().Queue()  # A queue managing two wrappers
+    # A queue managing two wrappers
+    chunk_line = mp.Manager().Queue()
 
     # initialiazation
     basename = os.path.basename(path0)
@@ -288,9 +292,7 @@ def _prep_work(**kwargs):
     logger_p.start()
 
     # logger in the main process
-    logger = logging.getLogger("auto3d")
-    logger.addHandler(QueueHandler(logging_queue))
-    logger.setLevel(logging.INFO)
+    logger = _prepare_logger(logging_queue)
     logger.info(
         f"""
          _              _             _____   ____
@@ -399,6 +401,59 @@ def _save_chunks(config, logger, job_name, path0):
     return chunk_info
 
 
+def _combine_sdfs(job_name, path0):
+    # Combine jobs into a single sdf
+    data = []
+    paths = os.path.join(job_name, "job*/*_3d.sdf")
+    files = glob.glob(paths)
+    if len(files) == 0:
+        msg = """The optimization engine did not run, or no 3D structure converged.
+                 The reason might be one of the following:
+                 1. Allocated memory is not enough;
+                 2. The input SMILES encodes invalid chemical structures;
+                 3. Patience is too small."""
+        sys.exit(msg)
+    for file in files:
+        with open(file, "r") as f:
+            data_i = f.readlines()
+        data += data_i
+    basename = os.path.basename(path0).split(".")[0].strip()
+    combined_basename = basename + "_out.sdf"
+    path_combined = os.path.join(job_name, combined_basename)
+    with open(path_combined, "w+") as f:
+        for line in data:
+            f.write(line)
+    return path_combined
+
+
+def _print_timing(start, end, logger):
+    print("Energy unit: Hartree if implicit.", flush=True)
+    logger.info("Energy unit: Hartree if implicit.")
+    running_time_m = int((end - start) / 60)
+    if running_time_m <= 60:
+        print(f"Program running time: {running_time_m + 1} minute(s)", flush=True)
+        logger.info(f"Program running time: {running_time_m + 1} minute(s)")
+    else:
+        running_time_h = running_time_m // 60
+        remaining_minutes = running_time_m - running_time_h * 60
+        print(
+            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)",
+            flush=True,
+        )
+        logger.info(
+            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)"
+        )
+
+
+def _clean_up(path0, path_combined, path_output, logger, logging_queue):
+    os.remove(path0)
+    os.remove(path_combined)
+    print(f"Output path: {path_output}", flush=True)
+    logger.info(f"Output path: {path_output}")
+    logging_queue.put(None)
+    time.sleep(3)  # wait for the daemon process for 3 seconds
+
+
 def main(**kwargs):
     """Run Auto3D."""
 
@@ -408,6 +463,7 @@ def main(**kwargs):
     )
     config = _divide_jobs_based_on_memory(config)
     chunk_info = _save_chunks(config, logger, job_name, path0)
+
     start = time.time()
 
     # Starting the processes
@@ -446,54 +502,16 @@ def main(**kwargs):
     for p2 in p2s:
         p2.join()
 
-    # Combine jobs into a single sdf
-    data = []
-    paths = os.path.join(job_name, "job*/*_3d.sdf")
-    files = glob.glob(paths)
-    if len(files) == 0:
-        msg = """The optimization engine did not run, or no 3D structure converged.
-                 The reason might be one of the following:
-                 1. Allocated memory is not enough;
-                 2. The input SMILES encodes invalid chemical structures;
-                 3. Patience is too small."""
-        sys.exit(msg)
-    for file in files:
-        with open(file, "r") as f:
-            data_i = f.readlines()
-        data += data_i
-    basename = os.path.basename(path0).split(".")[0].strip()
-    combined_basename = basename + "_out.sdf"
-    path_combined = os.path.join(job_name, combined_basename)
-    with open(path_combined, "w+") as f:
-        for line in data:
-            f.write(line)
+    # Combine output files from the jobs into a single sdf
+    path_combined = _combine_sdfs(job_name, path0)
 
     # Program ends
     end = time.time()
-    print("Energy unit: Hartree if implicit.", flush=True)
-    logger.info("Energy unit: Hartree if implicit.")
-    running_time_m = int((end - start) / 60)
-    if running_time_m <= 60:
-        print(f"Program running time: {running_time_m + 1} minute(s)", flush=True)
-        logger.info(f"Program running time: {running_time_m + 1} minute(s)")
-    else:
-        running_time_h = running_time_m // 60
-        remaining_minutes = running_time_m - running_time_h * 60
-        print(
-            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)",
-            flush=True,
-        )
-        logger.info(
-            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)"
-        )
+    _print_timing(start, end, logger)
     reorder_sdf(path_combined, path0)
     path_output = decode_ids(path_combined, mapping)
-    os.remove(path0)
-    os.remove(path_combined)
-    print(f"Output path: {path_output}", flush=True)
-    logger.info(f"Output path: {path_output}")
-    logging_queue.put(None)
-    time.sleep(3)  # wait for the daemon process for 3 seconds
+    _clean_up(path0, path_combined, path_output, logger, logging_queue)
+
     return path_output
 
 
