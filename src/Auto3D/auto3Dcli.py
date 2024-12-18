@@ -1,11 +1,10 @@
 import argparse
-import logging
 import sys
 
 import yaml
 
 import Auto3D
-from Auto3D.auto3D import main, options
+from Auto3D.auto3D import main
 
 
 def int_or_intlist(string):
@@ -20,35 +19,11 @@ def int_or_intlist(string):
 def cli():
     if len(sys.argv) == 2:
         # using yaml input
-        parameters_yaml = sys.argv[1]
-        parameters = yaml.load(open(parameters_yaml, "r"), Loader=yaml.FullLoader)
+        args_dict = yaml.load(open(sys.argv[1], "r"), Loader=yaml.FullLoader)
         # change 'None' to None
-        for key, val in parameters.items():
+        for key, val in args_dict.items():
             if val == "None":
-                parameters[key] = None
-
-        path = parameters["path"]
-        k = parameters["k"]
-        window = parameters["window"]
-        memory = parameters["memory"]
-        capacity = parameters["capacity"]
-        enumerate_tautomer = parameters["enumerate_tautomer"]
-        tauto_engine = parameters["tauto_engine"]
-        pKaNorm = parameters["pKaNorm"]
-        isomer_engine = parameters["isomer_engine"]
-        max_confs = parameters["max_confs"]
-        enumerate_isomer = parameters["enumerate_isomer"]
-        mode_oe = parameters["mode_oe"]
-        mpi_np = parameters["mpi_np"]
-        optimizing_engine = parameters["optimizing_engine"]
-        use_gpu = parameters["use_gpu"]
-        gpu_idx = parameters["gpu_idx"]  # YAML supports integer and lists natively
-        opt_steps = parameters["opt_steps"]
-        convergence_threshold = parameters["convergence_threshold"]
-        patience = parameters["patience"]
-        threshold = parameters["threshold"]
-        verbose = parameters["verbose"]
-        job_name = parameters["job_name"]
+                args_dict[key] = None
 
     else:
         # using argparse
@@ -63,13 +38,13 @@ def cli():
         parser.add_argument(
             "--k",
             type=int,
-            default=False,
+            default=None,
             help="Outputs the top-k structures for each SMILES.",
         )
         parser.add_argument(
             "--window",
             type=float,
-            default=False,
+            default=None,
             help=(
                 "Outputs the structures whose energies are within "
                 "window (kcal/mol) from the lowest energy"
@@ -157,7 +132,7 @@ def cli():
             "--use_gpu",
             default=True,
             type=lambda x: (str(x).lower() == "true"),
-            help="If True, the program will use GPU.",
+            help="If True, the program will use GPUs.",
         )
         parser.add_argument(
             "--gpu_idx",
@@ -206,54 +181,7 @@ def cli():
         )
 
         args = parser.parse_args()
-
-        path = args.path
-        k = args.k
-        window = args.window
-        memory = args.memory
-        capacity = args.capacity
-        enumerate_tautomer = args.enumerate_tautomer
-        tauto_engine = args.tauto_engine
-        pKaNorm = args.pKaNorm
-        isomer_engine = args.isomer_engine
-        max_confs = args.max_confs
-        enumerate_isomer = args.enumerate_isomer
-        mode_oe = args.mode_oe
-        mpi_np = args.mpi_np
-        optimizing_engine = args.optimizing_engine
-        use_gpu = args.use_gpu
-        gpu_idx = args.gpu_idx
-        opt_steps = args.opt_steps
-        convergence_threshold = args.convergence_threshold
-        patience = args.patience
-        threshold = args.threshold
-        verbose = args.verbose
-        job_name = args.job_name
-
-    arguments = options(
-        path,
-        k=k,
-        window=window,
-        verbose=verbose,
-        job_name=job_name,
-        enumerate_tautomer=enumerate_tautomer,
-        tauto_engine=tauto_engine,
-        pKaNorm=pKaNorm,
-        isomer_engine=isomer_engine,
-        enumerate_isomer=enumerate_isomer,
-        mode_oe=mode_oe,
-        mpi_np=mpi_np,
-        max_confs=max_confs,
-        use_gpu=use_gpu,
-        gpu_idx=gpu_idx,
-        capacity=capacity,
-        optimizing_engine=optimizing_engine,
-        opt_steps=opt_steps,
-        convergence_threshold=convergence_threshold,
-        patience=patience,
-        threshold=threshold,
-        memory=memory,
-    )
+        args_dict = vars(args)
 
     print(
         f"""
@@ -265,7 +193,7 @@ def cli():
         // Automatic generation of the low-energy 3D structures
     """
     )
-    out = main(arguments)
+    main(**args_dict)
 
 
 if __name__ == "__main__":

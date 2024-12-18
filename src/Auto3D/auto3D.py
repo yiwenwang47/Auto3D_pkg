@@ -232,7 +232,7 @@ def logger_process(queue, logging_path):
         logger.handle(message)
 
 
-def _create_config(**kwargs):
+def create_config(**kwargs):
     for key in kwargs:
         if key not in _allowed_args:
             raise ValueError(
@@ -248,7 +248,7 @@ def _prep_work(**kwargs):
     except RuntimeError:
         pass
 
-    config = _create_config(**kwargs)
+    config = create_config(**kwargs)
 
     # Some initial checks
     if config.path is None:
