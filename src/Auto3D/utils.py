@@ -436,22 +436,21 @@ def remove_enantiomers(inpath, out):
 
 def check_connectivity(mol: Chem.Mol) -> bool:
     r"""
-    Check if there is a new bond formed or a bond broken in the molecule.
+    Check if the generated conformer has the same topology as the original molecule.
     https://github.com/jensengroup/xyz2mol
     """
 
     block = Chem.MolToXYZBlock(mol, confId=0)
     new_mol = Chem.MolFromXYZBlock(block)
     rdDetermineBonds.DetermineConnectivity(new_mol)
-    adjacency_matrix, adjacency_matrix_new = Chem.GetAdjacencyMatrix(
-        mol
-    ), Chem.GetAdjacencyMatrix(new_mol)
+    adjacency_matrix = Chem.GetAdjacencyMatrix(mol)
+    adjacency_matrix_new = Chem.GetAdjacencyMatrix(new_mol)
     return np.allclose(adjacency_matrix, adjacency_matrix_new, atol=1e-1)
 
 
-def is_equal(mol_i: Chem.Mol, mol_j: Chem.Mol, threshold: float) -> bool:
+def are_equal(mol_i: Chem.Mol, mol_j: Chem.Mol, threshold: float) -> bool:
     r"""
-    Check if two conformers are the same.
+    Check whether two conformers are the same.
     Caution: This function does not verify whether the two molecules have the same topology!
     """
     # temperoray bug fix for https://github.com/rdkit/rdkit/issues/6826
@@ -480,7 +479,7 @@ def filter_unique(
         unique = True
         for mol_j in unique_mols:
             try:
-                unique = not is_equal(mol_i=mol_i, mol_j=mol_j, threshold=threshold)
+                unique = not are_equal(mol_i=mol_i, mol_j=mol_j, threshold=threshold)
             except RuntimeError:
                 unique = False
             if not unique:

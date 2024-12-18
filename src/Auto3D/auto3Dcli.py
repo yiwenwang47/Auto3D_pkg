@@ -190,7 +190,7 @@ def cli():
        / _ \   | | | | | __|  / _ \    |_ \  | | | |
       / ___ \  | |_| | | |_  | (_) |  ___) | | |_| |
      /_/   \_\  \__,_|  \__|  \___/  |____/  |____/  {str(Auto3D.__version__)}
-        // Automatic generation of the low-energy 3D structures
+        // Generating low-energy 3D structures
     """
     )
     main(**args_dict)

@@ -52,10 +52,10 @@ def _prepare_logger(logging_queue):
     return logger
 
 
-def isomer_wraper(chunk_info, config_main, queue, logging_queue):
+def isomer_wraper(chunk_info, config, queue, logging_queue):
     """
     chunk_info: (path, dir) tuple for the chunk
-    config_main: auto3D arguments
+    config: auto3D arguments
     queue: mp.queue
     logging_queue
     """
@@ -67,24 +67,21 @@ def isomer_wraper(chunk_info, config_main, queue, logging_queue):
         path, directory = path_dir
         meta = create_chunk_meta_names(path, directory)
         # Tautomer enumeratioin
-        if config_main.enumerate_tautomer:
-            path = handle_tautomers(
-                path=path, meta=meta, config=config_main, logger=logger
-            )
+        if config.enumerate_tautomer:
+            path = handle_tautomers(path=path, meta=meta, config=config, logger=logger)
         enumerated_sdf = generate_isomers_as_sdf(
-            path=path, directory=directory, meta=meta, config=config_main
+            path=path, directory=directory, meta=meta, config=config
         )
-
         queue.put((enumerated_sdf, path, directory, i + 1))
-    if isinstance(config_main.gpu_idx, int) or len(config_main.gpu_idx) == 1:
+    if isinstance(config.gpu_idx, int) or len(config.gpu_idx) == 1:
         queue.put("Done")
     else:
-        for _ in range(len(config_main.gpu_idx)):
+        for _ in range(len(config.gpu_idx)):
             queue.put("Done")
 
 
 def optim_rank_wrapper(
-    config_main, queue, logging_queue, device: torch.device
+    config, queue, logging_queue, device: torch.device
 ) -> List[Chem.Mol]:
 
     logger = _prepare_logger(logging_queue)
@@ -100,18 +97,18 @@ def optim_rank_wrapper(
         meta = create_chunk_meta_names(path, directory)
 
         # Optimizing step
-        config = {
-            "opt_steps": config_main.opt_steps,
-            "opttol": config_main.convergence_threshold,
-            "patience": config_main.patience,
-            "batchsize_atoms": config_main.batchsize_atoms,
+        opt_config = {
+            "opt_steps": config.opt_steps,
+            "opttol": config.convergence_threshold,
+            "patience": config.patience,
+            "batchsize_atoms": config.batchsize_atoms,
         }
         optimizer = optimizing(
             in_f=enumerated_sdf,
             out_f=meta["optimized_og"],
-            name=config_main.optimizing_engine,
+            name=config.optimizing_engine,
             device=device,
-            config=config,
+            config=opt_config,
         )
         optimizer.run()
 
@@ -119,9 +116,9 @@ def optim_rank_wrapper(
         rank_engine = ranking(
             input_path=meta["optimized_og"],
             out_path=meta["output"],
-            threshold=config_main.threshold,
-            k=config_main.k,
-            window=config_main.window,
+            threshold=config.threshold,
+            k=config.k,
+            window=config.window,
         )
         conformers.append(rank_engine.run())
 
@@ -134,7 +131,7 @@ def optim_rank_wrapper(
         with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
             tar.add(housekeeping_folder, arcname=os.path.basename(housekeeping_folder))
         shutil.rmtree(housekeeping_folder)
-        if not config_main.verbose:
+        if not config.verbose:
             try:  # Clusters does not support send2trash
                 send2trash(housekeeping_folder_gz)
             except:
@@ -455,13 +452,15 @@ def _clean_up(path0, path_combined, path_output, logger, logging_queue):
 
 
 def main(**kwargs):
-    """Run Auto3D."""
 
     # Preprocessing work
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
     config = _divide_jobs_based_on_memory(config)
+
+    # Save the initial .smi files as divided above
+    # chunk_info is a list of (path, dir) tuples for each chunk (.smi file)
     chunk_info = _save_chunks(config, logger, job_name, path0)
 
     start = time.time()
@@ -513,6 +512,24 @@ def main(**kwargs):
     _clean_up(path0, path_combined, path_output, logger, logging_queue)
 
     return path_output
+
+
+def generate_conformers(**kwargs):
+    r"""
+    Generate initial conformers from SMILES. Two steps: isomer generation and initial conformer embedding.
+    """
+
+    # Preprocessing work
+    config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
+        **kwargs
+    )
+    config = _divide_jobs_based_on_memory(config)
+    chunk_info = _save_chunks(config, logger, job_name, path0)
+
+    start = time.time()
+    logging_queue.put(None)
+    time.sleep(3)
+    return chunk_line
 
 
 def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
