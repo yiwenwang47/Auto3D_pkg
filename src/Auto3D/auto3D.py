@@ -52,6 +52,30 @@ def _prepare_logger(logging_queue):
     return logger
 
 
+def _clean_up_intermediate_files(directory, housekeeping_folder, output, verbose: bool):
+    r"""
+    Zip all meta data if verbose is True.
+
+    Arguments:
+        directory: the folder to be cleaned up
+        housekeeping_folder: a folder to contain all meta data
+        output: the output file that will not be moved
+    """
+    # Housekeeping
+    os.mkdir(housekeeping_folder)
+    housekeeping(directory, housekeeping_folder, output)
+    # Compress verbose folder
+    housekeeping_folder_gz = housekeeping_folder + ".tar.gz"
+    with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
+        tar.add(housekeeping_folder, arcname=os.path.basename(housekeeping_folder))
+    shutil.rmtree(housekeeping_folder)
+    if not verbose:
+        try:  # Clusters do not support send2trash
+            send2trash(housekeeping_folder_gz)
+        except:
+            os.remove(housekeeping_folder_gz)
+
+
 def isomer_wraper(chunk_info, config, queue, logging_queue):
     """
     chunk_info: (path, dir) tuple for the chunk
@@ -122,20 +146,13 @@ def optim_rank_wrapper(
         )
         conformers.append(rank_engine.run())
 
-        # Housekeeping
-        housekeeping_folder = meta["housekeeping_folder"]
-        os.mkdir(housekeeping_folder)
-        housekeeping(directory, housekeeping_folder, meta["output"])
-        # Conpress verbose folder
-        housekeeping_folder_gz = housekeeping_folder + ".tar.gz"
-        with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
-            tar.add(housekeeping_folder, arcname=os.path.basename(housekeeping_folder))
-        shutil.rmtree(housekeeping_folder)
-        if not config.verbose:
-            try:  # Clusters does not support send2trash
-                send2trash(housekeeping_folder_gz)
-            except:
-                os.remove(housekeeping_folder_gz)
+        _clean_up_intermediate_files(
+            directory=directory,
+            housekeeping_folder=meta["housekeeping_folder"],
+            output=meta["output"],
+            verbose=config.verbose,
+        )
+
     return conformers
 
 
@@ -360,6 +377,13 @@ def _divide_jobs_based_on_memory(config):
     # batchsize_atoms based on GPU memory
     config.t = t
     config.batchsize_atoms = config.batchsize_atoms * t
+
+    # TO BE DELETED
+    ####################
+    num_jobs = 2
+    chunk_size = 1
+    ####################
+
     config.num_jobs, config.chunk_size = num_jobs, chunk_size
     return config
 
@@ -381,7 +405,7 @@ def _save_chunks(config, logger, job_name, path0):
         case "sdf":
             df = SDF2chunks(path0)
     data_size = len(df)
-    num_chunks = max(int(data_size // chunk_size + 1), num_jobs)
+    num_chunks = max(round(data_size // chunk_size), num_jobs)
     print(f"The available memory is {t} GB.", flush=True)
     print(f"The task will be divided into {num_chunks} job(s).", flush=True)
     logger.info(f"The available memory is {t} GB.")
@@ -416,10 +440,10 @@ def _save_chunks(config, logger, job_name, path0):
     return chunk_info
 
 
-def _combine_sdfs(job_name, path0):
+def _combine_sdfs(job_name, path0, input_suffix="_3d.sdf", output_suffix="_out.sdf"):
     # Combine jobs into a single sdf
     data = []
-    paths = os.path.join(job_name, "job*/*_3d.sdf")
+    paths = os.path.join(job_name, f"job*/*{input_suffix}")
     files = glob.glob(paths)
     if len(files) == 0:
         msg = """The optimization engine did not run, or no 3D structure converged.
@@ -433,7 +457,7 @@ def _combine_sdfs(job_name, path0):
             data_i = f.readlines()
         data += data_i
     basename = os.path.basename(path0).split(".")[0].strip()
-    combined_basename = basename + "_out.sdf"
+    combined_basename = basename + output_suffix
     path_combined = os.path.join(job_name, combined_basename)
     with open(path_combined, "w+") as f:
         for line in data:
@@ -537,7 +561,6 @@ def main(**kwargs):
 
     # Combine output files from the jobs into a single sdf
     path_combined = _combine_sdfs(job_name, path0)
-
     # Program ends
     end = time.time()
     _print_timing(start, end, logger)
@@ -559,11 +582,32 @@ def generate_conformers(**kwargs):
     )
     config = _divide_jobs_based_on_memory(config)
     chunk_info = _save_chunks(config, logger, job_name, path0)
-
     start = time.time()
-    logging_queue.put(None)
-    time.sleep(3)
-    return mapping
+    p1 = _create_and_run_isomer_processes(
+        chunk_info=chunk_info,
+        config=config,
+        chunk_line=chunk_line,
+        logging_queue=logging_queue,
+    )
+    p1.join()
+    path_combined = _combine_sdfs(
+        job_name, path0, input_suffix="_enumerated.sdf", output_suffix="_conformers.sdf"
+    )
+    # Program ends
+    end = time.time()
+    _print_timing(start, end, logger)
+    reorder_sdf(path_combined, path0, clean_suffix=True)
+    path_output = decode_ids(path_combined, mapping, suffix="_conformers")
+    for _, directory in chunk_info:
+        housekeeping_folder = os.path.join(directory, "verbose")
+        _clean_up_intermediate_files(
+            directory=directory,
+            housekeeping_folder=housekeeping_folder,
+            verbose=config.verbose,
+            output="",
+        )
+    _clean_up(path0, path_combined, path_output, logger, logging_queue)
+    return path_output
 
 
 def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:

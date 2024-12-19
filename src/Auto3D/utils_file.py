@@ -322,7 +322,7 @@ def encode_ids(path: str) -> Tuple[str, dict]:
         raise ValueError("The input file should be either smi or sdf")
 
 
-def decode_ids(path: str, mapping: dict) -> str:
+def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
     """For an SDF file, decode the ids using the mapping"""
     mapping = {v: k for k, v in mapping.items()}
     basename = os.path.basename(path)
@@ -330,7 +330,9 @@ def decode_ids(path: str, mapping: dict) -> str:
     extension = basename.split(".")[-1].strip()
     new_path = os.path.join(
         dir,
-        "_".join(basename.split(".")[0].strip().split("_")[:-2]) + "_out." + extension,
+        "_".join(basename.split(".")[0].strip().split("_")[:-2])
+        + f"{suffix}."
+        + extension,
     )
 
     suppl = Chem.SDMolSupplier(path, removeHs=False)

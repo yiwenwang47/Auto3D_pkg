@@ -333,20 +333,19 @@ def housekeeping_helper(folder, file):
     shutil.move(file, new_name)
 
 
-def housekeeping(job_name, folder, optimized_structures):
-    """
-    Moving all meta data into a folder
+def housekeeping(job_folder, folder, output):
+    r"""
+    Moving all meta data into a folder specified by folder
 
     Arguments:
-        folder: a folder name to contain all meta data
-        out: the resulting SDF output
-    Returns:
-        whe the function is called, it moves all meta data into a folder.
+        job_folder: the folder to be cleaned up
+        folder: a folder to contain all meta data
+        output: the output file that will not be moved
     """
-    paths = os.path.join(job_name, "*")
+    paths = os.path.join(job_folder, "*")
     files = glob.glob(paths)
     for file in files:
-        if file != optimized_structures:
+        if file != output:
             shutil.move(file, folder)
 
     try:
@@ -674,7 +673,7 @@ def min_pairwise_distance(points: np.array) -> float:
     return np.sqrt(min_squared_distance)
 
 
-def reorder_sdf(sdf: str, source: str) -> List[Chem.Mol]:
+def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.Mol]:
     """Reorder the conformer order in the output SDF file such that
     it's consistent with the order in the input source file"""
     # convert smi/sdf to a list of ids with correct order
@@ -684,7 +683,7 @@ def reorder_sdf(sdf: str, source: str) -> List[Chem.Mol]:
         with open(source, "r") as f:
             data = f.readlines()
         for line in data:
-            smiles, id = tuple(line.strip().split())
+            id = line.strip().split()[-1]
             ids.append(id)
     elif format == "sdf":
         supp = Chem.SDMolSupplier(source, removeHs=False)
@@ -702,8 +701,10 @@ def reorder_sdf(sdf: str, source: str) -> List[Chem.Mol]:
         id = mol.GetProp("_Name")
         if "@taut" in id:
             id = id.split("@taut")[0]
+        elif clean_suffix:
+            id = id.split("_")[0]
+        mol.SetProp("_Name", id)
         id_mols[id].append(mol)
-
     # write the mols in the correct order to a new sdf file
     ordered_mols = []
     with Chem.SDWriter(sdf) as f:
