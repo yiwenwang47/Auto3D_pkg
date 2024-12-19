@@ -312,7 +312,13 @@ def encode_ids(path: str) -> Tuple[str, dict]:
         mapping = {}
         with Chem.SDWriter(new_path) as w:
             for i, mol in enumerate(suppl):
-                id = mol.GetProp("_Name").strip()
+                name, id = mol.GetProp("_Name").strip(), mol.GetProp("ID").strip()
+                if len(id) != 0:
+                    if name != id:
+                        # This is to accommadate the optimize_conformers method
+                        mol.SetProp("old_name", name)
+                else:
+                    id = name
                 mapping[id] = i
                 mol.SetProp("_Name", str(i))
                 w.write(mol)
@@ -338,6 +344,7 @@ def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
     suppl = Chem.SDMolSupplier(path, removeHs=False)
     with Chem.SDWriter(new_path) as w:
         for mol in suppl:
+
             name = mol.GetProp("_Name").strip()
             if "@taut" in name:
                 components = name.split("@taut")
@@ -346,11 +353,17 @@ def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
                 )
             else:
                 new_name = mapping[int(name)]
-            mol.SetProp("_Name", new_name)
 
-            id = "_".join(mol.GetProp("ID").strip().split("_")[1:])
-            new_id = new_name + "_" + id
-            mol.SetProp("ID", new_id)
+            if mol.HasProp("old_name"):
+                # This is to accommadate the optimize_conformers method
+                old_name = mol.GetProp("old_name")
+                mol.SetProp("_Name", old_name)
+                mol.SetProp("ID", new_name)
+            else:
+                mol.SetProp("_Name", new_name)
+                id = "_".join(mol.GetProp("ID").strip().split("_")[1:])
+                new_id = new_name + "_" + id
+                mol.SetProp("ID", new_id)
 
             w.write(mol)
     return new_path

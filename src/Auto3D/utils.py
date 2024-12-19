@@ -155,12 +155,12 @@ def check_input(config):
             # logger.critical(f"Only AIMNET can handle: {only_aimnet_smiles}, but {optimizing_engine} was parsed to Auto3D.")
 
 
-def check_smi_format(args):
+def check_smi_format(config):
     ANI_elements = {1, 6, 7, 8, 9, 16, 17}
     ANI = True
 
     smiles_all = []
-    with open(args.path, "r") as f:
+    with open(config.path, "r") as f:
         data = f.readlines()
     for line in data:
         if line.isspace():
@@ -173,14 +173,16 @@ def check_smi_format(args):
         # assert "." not in id, \
         #         f"Sorry, SMILES ID cannot contain period: {smiles}"
         smiles_all.append(smiles)
-    print(f"\tThere are {len(data)} SMILES in the input file {args.path}. ", flush=True)
+    print(
+        f"\tThere are {len(data)} SMILES in the input file {config.path}. ", flush=True
+    )
     print("\tAll SMILES and IDs are valid.", flush=True)
     logger.info(
-        f"\tThere are {len(data)} SMILES in the input file {args.path}. \n\tAll SMILES and IDs are valid."
+        f"\tThere are {len(data)} SMILES in the input file {config.path}. \n\tAll SMILES and IDs are valid."
     )
 
     # Check number of unspecified atomic stereo center
-    if args.enumerate_isomer == False:
+    if config.enumerate_isomer == False:
         for smiles in smiles_all:
             c = CalcNumUnspecifiedAtomStereoCenters(Chem.MolFromSmiles(smiles))
             if c > 0:
@@ -199,12 +201,12 @@ def check_smi_format(args):
     return ANI, only_aimnet_smiles
 
 
-def check_sdf_format(args):
+def check_sdf_format(config):
     """
     Check the input file and give recommendations.
 
     Arguments:
-        args: Arguments to auto3d.
+        config: Arguments to auto3d.
 
     Returns:
         This function checks the format of the input file, the properties for
@@ -213,7 +215,7 @@ def check_sdf_format(args):
     ANI_elements = {1, 6, 7, 8, 9, 16, 17}
     ANI = True
 
-    supp = Chem.SDMolSupplier(args.path, removeHs=False)
+    supp = Chem.SDMolSupplier(config.path, removeHs=False)
     mols, only_aimnet_ids = [], []
     for mol in supp:
         id = mol.GetProp("_Name")
@@ -230,15 +232,15 @@ def check_sdf_format(args):
             ANI = False
             only_aimnet_ids.append(id)
     print(
-        f"\tThere are {len(mols)} conformers in the input file {args.path}. ",
+        f"\tThere are {len(mols)} conformers in the input file {config.path}. ",
         flush=True,
     )
     print("\tAll conformers and IDs are valid.", flush=True)
     logger.info(
-        f"\tThere are {len(mols)} conformers in the input file {args.path}. \n\tAll conformers and IDs are valid."
+        f"\tThere are {len(mols)} conformers in the input file {config.path}. \n\tAll conformers and IDs are valid."
     )
 
-    if args.enumerate_isomer:
+    if config.enumerate_isomer:
         msg = "Enumerating stereocenters of an SDF file could change the conformers of the input file. Please use enumerate_isomer=False."
         warnings.warn(msg, UserWarning)
     return ANI, only_aimnet_ids

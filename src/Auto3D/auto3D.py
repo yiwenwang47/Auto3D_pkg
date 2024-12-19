@@ -143,6 +143,7 @@ def optim_rank_wrapper(
             threshold=config.threshold,
             k=config.k,
             window=config.window,
+            encoded=True,
         )
         conformers.append(rank_engine.run())
 
@@ -158,7 +159,7 @@ def optim_rank_wrapper(
 
 @dataclass
 class Config:
-    r"""Generate configuration arguments for the Auto3D main function.
+    r"""Generate configuration arguments for the Auto3D generate_and_optimize_conformers method.
 
     Args:
         path (str, optional): Path to input.smi file containing SMILES and IDs. See example/files folder for examples.
@@ -381,7 +382,7 @@ def _divide_jobs_based_on_memory(config):
     # TO BE DELETED
     ####################
     num_jobs = 2
-    chunk_size = 1
+    chunk_size = 4
     ####################
 
     config.num_jobs, config.chunk_size = num_jobs, chunk_size
@@ -428,9 +429,9 @@ def _save_chunks(config, logger, job_name, path0):
                 df_i = df.iloc[chunk_idx[i], :]
                 df_i.to_csv(new_name, header=None, index=None, sep=" ")
             case "sdf":
-                chunks_i = [df[j] for j in chunk_idx[i]]
+                df_i = [df[j] for j in chunk_idx[i]]
                 with open(new_name, "w") as f:
-                    for chunk in chunks_i:
+                    for chunk in df_i:
                         for line in chunk:
                             f.write(line)
         path = new_name
@@ -530,7 +531,7 @@ def _create_and_run_opt_processes(config, chunk_line, logging_queue):
     return p2s
 
 
-def main(**kwargs):
+def generate_and_optimize_conformers(**kwargs):
 
     # Preprocessing work
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
@@ -621,15 +622,71 @@ def generate_conformers(**kwargs):
     return path_output
 
 
+def optimize_conformers(**kwargs):
+    r"""
+    Optimize conformers generated in an sdf file.
+    """
+    kwargs["enumerate_isomer"] = False
+    # Preprocessing work
+    config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
+        **kwargs
+    )
+    if not config.path.endswith(".sdf"):
+        sys.exit("Please provide an sdf file for optimization.")
+    config = _divide_jobs_based_on_memory(config)
+    if isinstance(config.gpu_idx, int):
+        config.gpu_idx = [config.gpu_idx]
+    start = time.time()
+
+    # Save the initial .sdf files as divided above
+    chunk_info = _save_chunks(config, logger, job_name, path0)
+
+    # This is not pretty, but a quick fix
+    for i, path_dir in enumerate(chunk_info):
+        path, directory = path_dir
+        chunk_line.put((path, path, directory, i + 1))
+    for _ in range(len(config.gpu_idx)):
+        chunk_line.put("Done")
+
+    p2s = _create_and_run_opt_processes(
+        config=config, chunk_line=chunk_line, logging_queue=logging_queue
+    )
+    for p2 in p2s:
+        p2.join()
+
+    # Combine output files from the jobs into a single sdf
+    path_combined = _combine_sdfs(job_name, path0)
+
+    # Program ends
+    end = time.time()
+    _print_timing(start, end, logger)
+    reorder_sdf(path_combined, path0)
+    path_output = decode_ids(path_combined, mapping, suffix="_optimized")
+
+    # Rank again to deal with the case where conformers of the same molecule are assigned to different jobs
+    rank_engine = ranking(
+        input_path=path_output,
+        out_path=path_output,
+        threshold=config.threshold,
+        k=config.k,
+        window=config.window,
+        encoded=False,
+    )
+    rank_engine.run()
+    _clean_up(path0, path_combined, path_output, logger, logging_queue)
+
+    return path_output
+
+
 def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
     """
     A handy tool for finding the low-energy conformers for a list of SMILES.
-    Compared with the ``main`` function, it sacrifices efficiency for convenience.
+    Compared with the ``generate_and_optimize_conformers`` function, it sacrifices efficiency for convenience.
     because ``smiles2mols`` uses only 1 process.
     Both the input and output are returned as variables within Python.
 
     It's recommended only when the number of SMILES is less than 150;
-    Otherwise using the main function will be faster.
+    Otherwise using the generate_and_optimize_conformers function will be faster.
 
     :param smiles: A list of SMILES strings for which to find low-energy conformers.
     :type smiles: List[str]

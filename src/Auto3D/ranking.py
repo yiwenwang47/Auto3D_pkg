@@ -28,7 +28,13 @@ class ranking(object):
         None
     """
 
-    def __init__(self, input_path, out_path, threshold, k=False, window=False):
+    def __init__(
+        self, input_path, out_path, threshold, k=False, window=False, encoded=True
+    ):
+        r"""
+        Args:
+            encoded: Whether the molecule names are encoded. An encoded name would look like: 0_1_2. We want 0 instead.
+        """
         self.input_path = input_path
         self.out_path = out_path
         self.threshold = threshold
@@ -53,12 +59,12 @@ class ranking(object):
         }
         self.k = k
         self.window = window
+        self.encoded = encoded
 
-    @staticmethod
-    def similar(name, names):
-        name2 = name.strip().split("_")[0]
-        names2 = names[0].strip().split("_")[0]
-        return name2 == names2
+    def get_name(self, name):
+        if self.encoded:
+            return name.strip().split("_")[0].strip()
+        return name
 
     @staticmethod
     def add_relative_e(list0):
@@ -161,7 +167,7 @@ class ranking(object):
                 and check_connectivity(mol)
             ):  # Verify convergence and correct connectivity
                 mols.append(mol)
-                names.append(mol.GetProp("_Name").strip().split("_")[0].strip())
+                names.append(self.get_name(mol.GetProp("_Name")))
                 energies.append(float(mol.GetProp("E_tot")))
 
         df = pd.DataFrame({"name": names, "energy": energies, "mol": mols})
@@ -195,9 +201,7 @@ class ranking(object):
                     str(float(mol.GetProp("E_rel(eV)")) * ev2kcalpermol),
                 )
                 mol.ClearProp("E_rel(eV)")
-                # Remove _ in the molecule title
-                t = mol.GetProp("_Name")
-                t_simplified = t.split("_")[0].strip()
-                mol.SetProp("_Name", t_simplified)
+                # Remove _ in the molecule title if it is encoded
+                mol.SetProp("_Name", self.get_name(mol.GetProp("_Name")))
                 f.write(mol)
         return results
