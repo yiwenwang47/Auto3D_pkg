@@ -4,7 +4,7 @@ import sys
 import yaml
 
 import Auto3D
-from Auto3D.auto3D import main
+from Auto3D.auto3D import generate_and_optimize_conformers
 
 
 def int_or_intlist(string):
@@ -193,7 +193,7 @@ def cli():
         // Generating low-energy 3D structures
     """
     )
-    main(**args_dict)
+    generate_and_optimize_conformers(**args_dict)
 
 
 if __name__ == "__main__":

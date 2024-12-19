@@ -381,8 +381,8 @@ def _divide_jobs_based_on_memory(config):
 
     # TO BE DELETED
     ####################
-    num_jobs = 2
-    chunk_size = 4
+    # num_jobs = 2
+    # chunk_size = 4
     ####################
 
     config.num_jobs, config.chunk_size = num_jobs, chunk_size
