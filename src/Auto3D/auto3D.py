@@ -239,6 +239,18 @@ def create_config(**kwargs):
 
 
 def _prep_work(**kwargs):
+
+    r"""
+    Args:
+        config
+
+    Returns:
+        job_name: the name of the job
+        path0: the path of the _encoded.smi file with molecules and their encoded IDs
+        mapping: dictionary of the format {original molecule id: encoded molecule id}
+        chunk_line: a mp.Queue for communication between processes, it receives the path of the enumerated sdf file
+
+    """
     # Make sure the spawn method is used
     try:
         mp.set_start_method("fork")
@@ -353,6 +365,12 @@ def _divide_jobs_based_on_memory(config):
 
 
 def _save_chunks(config, logger, job_name, path0):
+    r"""
+
+    Returns:
+        chunk_info: a list of (path, dir) tuples for each chunk (.smi file)
+    """
+
     basename = os.path.basename(path0).split(".")[0].strip()
     input_format = config.input_format
     t, chunk_size, num_jobs = config.t, config.chunk_size, config.num_jobs
@@ -451,33 +469,22 @@ def _clean_up(path0, path_combined, path_output, logger, logging_queue):
     time.sleep(3)  # wait for the daemon process for 3 seconds
 
 
-def main(**kwargs):
-
-    # Preprocessing work
-    config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
-        **kwargs
-    )
-    config = _divide_jobs_based_on_memory(config)
-
-    # Save the initial .smi files as divided above
-    # chunk_info is a list of (path, dir) tuples for each chunk (.smi file)
-    chunk_info = _save_chunks(config, logger, job_name, path0)
-
-    start = time.time()
-
-    # Starting the processes
+def _create_and_run_isomer_processes(chunk_info, config, chunk_line, logging_queue):
     p1 = mp.Process(
         target=isomer_wraper,
         kwargs={
             "chunk_info": chunk_info,
-            "config_main": config,
+            "config": config,
             "queue": chunk_line,
             "logging_queue": logging_queue,
         },
     )
+    p1.start()
+    return p1
+
+
+def _create_and_run_opt_processes(config, chunk_line, logging_queue):
     p2s = []
-    if isinstance(config.gpu_idx, int):
-        config.gpu_idx = [config.gpu_idx]
     for idx in config.gpu_idx:
         if config.use_gpu:
             device = torch.device(f"cuda:{idx}")
@@ -487,16 +494,43 @@ def main(**kwargs):
             mp.Process(
                 target=optim_rank_wrapper,
                 kwargs={
-                    "config_main": config,
+                    "config": config,
                     "queue": chunk_line,
                     "logging_queue": logging_queue,
                     "device": device,
                 },
             )
         )
-    p1.start()
     for p2 in p2s:
         p2.start()
+    return p2s
+
+
+def main(**kwargs):
+
+    # Preprocessing work
+    config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
+        **kwargs
+    )
+    config = _divide_jobs_based_on_memory(config)
+    if isinstance(config.gpu_idx, int):
+        config.gpu_idx = [config.gpu_idx]
+
+    # Save the initial .smi files as divided above
+    chunk_info = _save_chunks(config, logger, job_name, path0)
+
+    start = time.time()
+
+    # Starting the processes
+    p1 = _create_and_run_isomer_processes(
+        chunk_info=chunk_info,
+        config=config,
+        chunk_line=chunk_line,
+        logging_queue=logging_queue,
+    )
+    p2s = _create_and_run_opt_processes(
+        config=config, chunk_line=chunk_line, logging_queue=logging_queue
+    )
     p1.join()
     for p2 in p2s:
         p2.join()
@@ -529,7 +563,7 @@ def generate_conformers(**kwargs):
     start = time.time()
     logging_queue.put(None)
     time.sleep(3)
-    return chunk_line
+    return mapping
 
 
 def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
