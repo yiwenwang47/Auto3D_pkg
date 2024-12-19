@@ -69,12 +69,12 @@ def create_chunk_meta_names(path, dir):
     return dct
 
 
-def check_input(args):
+def check_input(config):
     """
     Check the input file and give recommendations.
 
     Arguments:
-        args: Arguments to auto3d.
+        config: Arguments to auto3d.
 
     Returns:
         This function checks the format of the input file, the properties for
@@ -85,47 +85,47 @@ def check_input(args):
     # ANI_elements = {1, 6, 7, 8, 9, 16, 17}
     # ANI = True
     # Check --use_gpu
-    gpu_flag = args.use_gpu
+    gpu_flag = config.use_gpu
     if gpu_flag:
         if torch.cuda.is_available() == False:
             sys.exit("No cuda device was detected. Please set --use_gpu=False.")
-    isomer_engine = args.isomer_engine
+    isomer_engine = config.isomer_engine
     if ("OE_LICENSE" not in os.environ) and (isomer_engine == "omega"):
         sys.exit(
             "Omega is used as the isomer engine, but OE_LICENSE is not detected. Please use rdkit."
         )
     # Check the installation for open toolkits, torchani
-    if args.isomer_engine == "omega":
+    if config.isomer_engine == "omega":
         try:
             from openeye import oechem
         except:
             sys.exit(
                 "Omega is used as isomer engine, but openeye toolkits are not installed."
             )
-    if args.optimizing_engine == "ANI2x":
+    if config.optimizing_engine == "ANI2x":
         try:
             import torchani
         except:
             sys.exit(
                 "ANI2x is used as optimizing engine, but TorchANI is not installed."
             )
-    if os.path.exists(args.optimizing_engine):
+    if os.path.exists(config.optimizing_engine):
         try:
-            _ = torch.jit.load(args.optimizing_engine)
+            _ = torch.jit.load(config.optimizing_engine)
         except:
             sys.exit(
                 "A path to a user NNP is used as optimizing engine, but it cannot be loaded by torch.load. See this link for information about saving and loading models: https://pytorch.org/tutorials/beginner/saving_loading_models.html#save-load-entire-model"
             )
-    if int(args.opt_steps) < 10:
+    if int(config.opt_steps) < 10:
         sys.exit(
-            f"Number of optimization steps cannot be smaller than 10, but received {args.opt_steps}"
+            f"Number of optimization steps cannot be smaller than 10, but received {config.opt_steps}"
         )
 
     # Check the input format
-    if args.input_format == "smi":
-        ANI, only_aimnet_smiles = check_smi_format(args)
-    elif args.input_format == "sdf":
-        ANI, only_aimnet_smiles = check_sdf_format(args)
+    if config.input_format == "smi":
+        ANI, only_aimnet_smiles = check_smi_format(config)
+    elif config.input_format == "sdf":
+        ANI, only_aimnet_smiles = check_sdf_format(config)
 
     print("Suggestions for choosing isomer_engine and optimizing_engine: ", flush=True)
     logger.info(f"Suggestions for choosing isomer_engine and optimizing_engine: ")
@@ -147,7 +147,7 @@ def check_input(args):
         )
         logger.info("\tIsomer engine options: RDKit and Omega.")
         logger.info("\tOptimizing engine options: AIMNET or your own NNP.")
-        optimizing_engine = args.optimizing_engine
+        optimizing_engine = config.optimizing_engine
         if optimizing_engine in {"ANI2x", "ANI2xt"}:
             sys.exit(
                 f"Only AIMNET can handle: {only_aimnet_smiles}, but {optimizing_engine} was parsed to Auto3D."

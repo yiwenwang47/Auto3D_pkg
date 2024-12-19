@@ -493,7 +493,7 @@ def _clean_up(path0, path_combined, path_output, logger, logging_queue):
     time.sleep(3)  # wait for the daemon process for 3 seconds
 
 
-def _create_and_run_isomer_processes(chunk_info, config, chunk_line, logging_queue):
+def _create_and_run_isomer_gen_process(chunk_info, config, chunk_line, logging_queue):
     p1 = mp.Process(
         target=isomer_wraper,
         kwargs={
@@ -546,7 +546,7 @@ def main(**kwargs):
     start = time.time()
 
     # Starting the processes
-    p1 = _create_and_run_isomer_processes(
+    p1 = _create_and_run_isomer_gen_process(
         chunk_info=chunk_info,
         config=config,
         chunk_line=chunk_line,
@@ -580,10 +580,17 @@ def generate_conformers(**kwargs):
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
+    if config.use_gpu:
+        message = "Warning: The process of generating isomers and embedding conformers does not utilize GPUs. Changing 'use_gpu' to False."
+        print(message, flush=True)
+        logger.warning(message)
+        config.use_gpu = False
     config = _divide_jobs_based_on_memory(config)
     chunk_info = _save_chunks(config, logger, job_name, path0)
     start = time.time()
-    p1 = _create_and_run_isomer_processes(
+
+    # Starting the process
+    p1 = _create_and_run_isomer_gen_process(
         chunk_info=chunk_info,
         config=config,
         chunk_line=chunk_line,
@@ -593,6 +600,7 @@ def generate_conformers(**kwargs):
     path_combined = _combine_sdfs(
         job_name, path0, input_suffix="_enumerated.sdf", output_suffix="_conformers.sdf"
     )
+
     # Program ends
     end = time.time()
     _print_timing(start, end, logger)
@@ -606,7 +614,10 @@ def generate_conformers(**kwargs):
             verbose=config.verbose,
             output="",
         )
+        if not config.verbose:
+            shutil.rmtree(directory)
     _clean_up(path0, path_combined, path_output, logger, logging_queue)
+
     return path_output
 
 
