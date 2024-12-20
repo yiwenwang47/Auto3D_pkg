@@ -707,7 +707,7 @@ def optimize_conformers(**kwargs):
     return path_output
 
 
-def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
+def smiles2mols(smiles: List[str], **kwargs) -> List[Chem.Mol]:
     """
     A handy tool for finding the low-energy conformers for a list of SMILES.
     Compared with the ``generate_and_optimize_conformers`` function, it sacrifices efficiency for convenience.
@@ -724,66 +724,71 @@ def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
     :return: A list of RDKit Mol objects representing the low-energy conformers of the input SMILES.
     :rtype: List[Chem.Mol]
     """
+    config = create_config(**kwargs)
     with tempfile.TemporaryDirectory() as tmpdirname:
         basename = "smiles.smi"
         path0 = os.path.join(tmpdirname, basename)
         smiles2smi(smiles, path0)  # save all SMILES into a smi file
-        args["path"] = path0
-        k = args.k
-        window = args.window
+        config.input_file = path0
+        k = config.k
+        window = config.window
         if (not k) and (not window):
             sys.exit(
                 "Either k or window needs to be specified. "
                 "Usually, setting '--k=1' satisfies most needs."
             )
-        args.input_format = "smi"
-        check_input(args)
+        config.input_format = "smi"
+        check_input(config)
 
         # smi to sdf
         meta = create_chunk_meta_names(path0, tmpdirname)
         isomer_engine = rd_isomer(
-            path0,
-            meta["smiles_enumerated"],
-            meta["smiles_reduced"],
-            meta["smiles_hashed"],
-            meta["enumerated_sdf"],
-            tmpdirname,
-            args.max_confs,
-            0.03,
-            args.mpi_np,
-            args.enumerate_isomer,
+            smi=path0,
+            smiles_enumerated=meta["smiles_enumerated"],
+            smiles_enumerated_reduced=meta["smiles_reduced"],
+            smiles_hashed=meta["smiles_hashed"],
+            enumerated_sdf=meta["enumerated_sdf"],
+            job_name=tmpdirname,
+            max_confs=config.max_confs,
+            threshold=0.03,
+            np=config.mpi_np,
+            flipper=config.enumerate_isomer,
         )
         isomer_engine.run()
 
         # optimize conformers
-        if args.use_gpu:
-            if isinstance(args.gpu_idx, int):
-                idx = args.gpu_idx
+        if config.use_gpu:
+            if isinstance(config.gpu_idx, int):
+                idx = config.gpu_idx
             else:
-                idx = args.gpu_idx[0]
+                idx = config.gpu_idx[0]
             device = torch.device(f"cuda:{idx}")
         else:
             device = torch.device("cpu")
-        config = {
-            "opt_steps": args.opt_steps,
-            "opttol": args.convergence_threshold,
-            "patience": args.patience,
-            "batchsize_atoms": args.batchsize_atoms,
+        opt_config = {
+            "opt_steps": config.opt_steps,
+            "opttol": config.convergence_threshold,
+            "patience": config.patience,
+            "batchsize_atoms": config.batchsize_atoms,
         }
         opt_engine = optimizing(
-            meta["enumerated_sdf"],
-            meta["optimized_og"],
-            args.optimizing_engine,
-            device,
-            config,
+            in_f=meta["enumerated_sdf"],
+            out_f=meta["optimized_og"],
+            name=config.optimizing_engine,
+            device=device,
+            config=opt_config,
         )
         opt_engine.run()
 
         # Ranking step
         rank_engine = ranking(
-            meta["optimized_og"], meta["output"], args.threshold, k=k, window=window
+            input_path=meta["optimized_og"],
+            out_path=meta["output"],
+            threshold=config.threshold,
+            k=k,
+            window=window,
         )
-        _ = rank_engine.run()
+        rank_engine.run()
         conformers = reorder_sdf(sdf=meta["output"], source=path0)
 
         print("Energy unit: Hartree if implicit.", flush=True)
