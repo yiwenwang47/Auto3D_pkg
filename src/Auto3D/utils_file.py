@@ -366,4 +366,6 @@ def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
                 mol.SetProp("ID", new_id)
 
             w.write(mol)
+    if new_path != path:
+        os.remove(path)  # remove the old file
     return new_path

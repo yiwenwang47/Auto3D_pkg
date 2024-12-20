@@ -162,7 +162,8 @@ class Config:
     r"""Generate configuration arguments for the Auto3D generate_and_optimize_conformers method.
 
     Args:
-        path (str, optional): Path to input.smi file containing SMILES and IDs. See example/files folder for examples.
+        input_file (str, optional): Path to input.smi file containing SMILES and IDs. See example/files folder for examples.
+        output_file (str, optional): Path to the output file. Should be an sdf file. If specified and verbose=False, the job folder will be deleted.
 
         # Output Control
         k (bool, optional): Number of conformers for each molecule. Defaults to None.
@@ -199,7 +200,8 @@ class Config:
         threshold (float, optional): RMSD threshold for considering conformers as duplicates. Defaults to 0.3.
     """
 
-    path: Optional[str] = None
+    input_file: Optional[str] = None
+    output_file: Optional[str] = None
     k: Optional[int] = None
     window: Optional[float] = None
     verbose: bool = False
@@ -278,9 +280,9 @@ def _prep_work(**kwargs):
     config = create_config(**kwargs)
 
     # Some initial checks
-    if config.path is None:
+    if config.input_file is None:
         sys.exit("Please specify the input file path.")
-    path0, mapping = encode_ids(config.path)
+    path0, mapping = encode_ids(config.input_file)
     input_format = os.path.splitext(path0)[1][1:]
     if (input_format != "smi") and (input_format != "sdf"):
         sys.exit(
@@ -292,6 +294,9 @@ def _prep_work(**kwargs):
             "Either k or window needs to be specified. "
             "Usually, setting '--k=1' satisfies most needs."
         )
+    if config.output_file is not None:
+        if not config.output_file.endswith(".sdf"):
+            sys.exit("Warning: output_file should have a .sdf extension")
 
     # Create job_name based on the current time
     if config.job_name == "":
@@ -466,34 +471,6 @@ def _combine_sdfs(job_name, path0, input_suffix="_3d.sdf", output_suffix="_out.s
     return path_combined
 
 
-def _print_timing(start, end, logger):
-    print("Energy unit: Hartree if implicit.", flush=True)
-    logger.info("Energy unit: Hartree if implicit.")
-    running_time_m = int((end - start) / 60)
-    if running_time_m <= 60:
-        print(f"Program running time: {running_time_m + 1} minute(s)", flush=True)
-        logger.info(f"Program running time: {running_time_m + 1} minute(s)")
-    else:
-        running_time_h = running_time_m // 60
-        remaining_minutes = running_time_m - running_time_h * 60
-        print(
-            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)",
-            flush=True,
-        )
-        logger.info(
-            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)"
-        )
-
-
-def _clean_up(path0, path_combined, path_output, logger, logging_queue):
-    os.remove(path0)
-    os.remove(path_combined)
-    print(f"Output path: {path_output}", flush=True)
-    logger.info(f"Output path: {path_output}")
-    logging_queue.put(None)
-    time.sleep(3)  # wait for the daemon process for 3 seconds
-
-
 def _create_and_run_isomer_gen_process(chunk_info, config, chunk_line, logging_queue):
     p1 = mp.Process(
         target=isomer_wraper,
@@ -531,6 +508,38 @@ def _create_and_run_opt_processes(config, chunk_line, logging_queue):
     return p2s
 
 
+def _print_timing(start, end, logger):
+    print("Energy unit: Hartree if implicit.", flush=True)
+    logger.info("Energy unit: Hartree if implicit.")
+    running_time_m = int((end - start) / 60)
+    if running_time_m <= 60:
+        print(f"Program running time: {running_time_m + 1} minute(s)", flush=True)
+        logger.info(f"Program running time: {running_time_m + 1} minute(s)")
+    else:
+        running_time_h = running_time_m // 60
+        remaining_minutes = running_time_m - running_time_h * 60
+        print(
+            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)",
+            flush=True,
+        )
+        logger.info(
+            f"Program running time: {running_time_h} hour(s) and {remaining_minutes} minute(s)"
+        )
+
+
+def _clean_up(path_output, logger, logging_queue, job_name, output_file, verbose):
+    if output_file is not None:
+        shutil.move(path_output, output_file)
+        path_output = output_file
+    if not verbose:
+        shutil.rmtree(job_name)
+    print(f"Output path: {path_output}", flush=True)
+    logger.info(f"Output path: {path_output}")
+    logging_queue.put(None)
+    time.sleep(3)  # wait for the daemon process for 3 seconds
+    return path_output
+
+
 def generate_and_optimize_conformers(**kwargs):
 
     # Preprocessing work
@@ -565,10 +574,16 @@ def generate_and_optimize_conformers(**kwargs):
     # Program ends
     end = time.time()
     _print_timing(start, end, logger)
-    reorder_sdf(path_combined, path0)
-    path_output = decode_ids(path_combined, mapping)
-    _clean_up(path0, path_combined, path_output, logger, logging_queue)
-
+    reorder_sdf(sdf=path_combined, source=path0)
+    path_output = decode_ids(path=path_combined, mapping=mapping)
+    path_output = _clean_up(
+        path_output,
+        logger,
+        logging_queue,
+        job_name,
+        output_file=config.output_file,
+        verbose=config.verbose,
+    )
     return path_output
 
 
@@ -605,10 +620,10 @@ def generate_conformers(**kwargs):
     # Program ends
     end = time.time()
     _print_timing(start, end, logger)
-    reorder_sdf(path_combined, path0, clean_suffix=True)
-    path_output = decode_ids(path_combined, mapping, suffix="_conformers")
+    reorder_sdf(sdf=path_combined, source=path0, clean_suffix=True)
+    path_output = decode_ids(path=path_combined, mapping=mapping, suffix="_conformers")
     for _, directory in chunk_info:
-        housekeeping_folder = os.path.join(directory, "verbose")
+        housekeeping_folder = os.path.join(directory, "intermediate_files")
         _clean_up_intermediate_files(
             directory=directory,
             housekeeping_folder=housekeeping_folder,
@@ -617,7 +632,14 @@ def generate_conformers(**kwargs):
         )
         if not config.verbose:
             shutil.rmtree(directory)
-    _clean_up(path0, path_combined, path_output, logger, logging_queue)
+    path_output = _clean_up(
+        path_output,
+        logger,
+        logging_queue,
+        job_name,
+        output_file=config.output_file,
+        verbose=config.verbose,
+    )
 
     return path_output
 
@@ -631,7 +653,7 @@ def optimize_conformers(**kwargs):
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
-    if not config.path.endswith(".sdf"):
+    if not config.input_file.endswith(".sdf"):
         sys.exit("Please provide an sdf file for optimization.")
     config = _divide_jobs_based_on_memory(config)
     if isinstance(config.gpu_idx, int):
@@ -660,8 +682,8 @@ def optimize_conformers(**kwargs):
     # Program ends
     end = time.time()
     _print_timing(start, end, logger)
-    reorder_sdf(path_combined, path0)
-    path_output = decode_ids(path_combined, mapping, suffix="_optimized")
+    reorder_sdf(sdf=path_combined, source=path0)
+    path_output = decode_ids(path=path_combined, mapping=mapping, suffix="_optimized")
 
     # Rank again to deal with the case where conformers of the same molecule are assigned to different jobs
     rank_engine = ranking(
@@ -673,7 +695,14 @@ def optimize_conformers(**kwargs):
         encoded=False,
     )
     rank_engine.run()
-    _clean_up(path0, path_combined, path_output, logger, logging_queue)
+    path_output = _clean_up(
+        path_output,
+        logger,
+        logging_queue,
+        job_name,
+        output_file=config.output_file,
+        verbose=config.verbose,
+    )
 
     return path_output
 
@@ -755,7 +784,7 @@ def smiles2mols(smiles: List[str], args: dict) -> List[Chem.Mol]:
             meta["optimized_og"], meta["output"], args.threshold, k=k, window=window
         )
         _ = rank_engine.run()
-        conformers = reorder_sdf(meta["output"], path0)
+        conformers = reorder_sdf(sdf=meta["output"], source=path0)
 
         print("Energy unit: Hartree if implicit.", flush=True)
     return conformers

@@ -134,7 +134,7 @@ class ranking(object):
         maximum = window + minimum
         group = group.loc[group["energy"] <= maximum]
 
-        out_mols_ = filter_unique(list(group["mols"]), self.threshold)
+        out_mols_ = filter_unique(list(group["mol"]), self.threshold)
         out_mols = []
 
         if len(out_mols_) == 0:

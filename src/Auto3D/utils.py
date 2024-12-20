@@ -53,7 +53,7 @@ def create_chunk_meta_names(path, dir):
     smiles_hashed = os.path.join(dir, "smiles_enumerated_hashed.smi")
     enumerated_sdf = os.path.join(dir, "smiles_enumerated.sdf")
     sorted_sdf = os.path.join(dir, "enumerated_sorted.sdf")
-    housekeeping_folder = os.path.join(dir, "verbose")
+    housekeeping_folder = os.path.join(dir, "intermediate_files")
     # dct["output_name"] = output_name
     dct["output"] = output
     dct["optimized_og"] = optimized_og
@@ -160,7 +160,7 @@ def check_smi_format(config):
     ANI = True
 
     smiles_all = []
-    with open(config.path, "r") as f:
+    with open(config.input_file, "r") as f:
         data = f.readlines()
     for line in data:
         if line.isspace():
@@ -174,11 +174,12 @@ def check_smi_format(config):
         #         f"Sorry, SMILES ID cannot contain period: {smiles}"
         smiles_all.append(smiles)
     print(
-        f"\tThere are {len(data)} SMILES in the input file {config.path}. ", flush=True
+        f"\tThere are {len(data)} SMILES in the input file {config.input_file}. ",
+        flush=True,
     )
     print("\tAll SMILES and IDs are valid.", flush=True)
     logger.info(
-        f"\tThere are {len(data)} SMILES in the input file {config.path}. \n\tAll SMILES and IDs are valid."
+        f"\tThere are {len(data)} SMILES in the input file {config.input_file}. \n\tAll SMILES and IDs are valid."
     )
 
     # Check number of unspecified atomic stereo center
@@ -215,7 +216,7 @@ def check_sdf_format(config):
     ANI_elements = {1, 6, 7, 8, 9, 16, 17}
     ANI = True
 
-    supp = Chem.SDMolSupplier(config.path, removeHs=False)
+    supp = Chem.SDMolSupplier(config.input_file, removeHs=False)
     mols, only_aimnet_ids = [], []
     for mol in supp:
         id = mol.GetProp("_Name")
@@ -232,12 +233,12 @@ def check_sdf_format(config):
             ANI = False
             only_aimnet_ids.append(id)
     print(
-        f"\tThere are {len(mols)} conformers in the input file {config.path}. ",
+        f"\tThere are {len(mols)} conformers in the input file {config.input_file}. ",
         flush=True,
     )
     print("\tAll conformers and IDs are valid.", flush=True)
     logger.info(
-        f"\tThere are {len(mols)} conformers in the input file {config.path}. \n\tAll conformers and IDs are valid."
+        f"\tThere are {len(mols)} conformers in the input file {config.input_file}. \n\tAll conformers and IDs are valid."
     )
 
     if config.enumerate_isomer:
@@ -716,4 +717,5 @@ def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.
                 ordered_mols.extend(mols)
                 for mol in mols:
                     f.write(mol)
+    os.remove(source)
     return ordered_mols
