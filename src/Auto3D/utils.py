@@ -107,14 +107,14 @@ def check_input(config):
             import torchani
         except:
             sys.exit(
-                "ANI2x is used as optimizing engine, but TorchANI is not installed."
+                "ANI2x is used as the optimizing engine, but TorchANI is not installed."
             )
     if os.path.exists(config.optimizing_engine):
         try:
             _ = torch.jit.load(config.optimizing_engine)
         except:
             sys.exit(
-                "A path to a user NNP is used as optimizing engine, but it cannot be loaded by torch.load. See this link for information about saving and loading models: https://pytorch.org/tutorials/beginner/saving_loading_models.html#save-load-entire-model"
+                "A path to a user NNP is used as the optimizing engine, but it cannot be loaded by torch.load. See this link for information about saving and loading models: https://pytorch.org/tutorials/beginner/saving_loading_models.html#save-load-entire-model"
             )
     if int(config.opt_steps) < 10:
         sys.exit(

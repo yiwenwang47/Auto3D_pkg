@@ -187,7 +187,8 @@ class Config:
         # Hardware Settings
         use_gpu (bool, optional): Whether to use GPU when available. Defaults to True.
         gpu_idx (int or List[int], optional): GPU index(es) to use. Only applies when use_gpu=True. Defaults to 0.
-        capacity (int, optional): Number of SMILES to process per 1GB memory. Defaults to 42.
+        capacity (int, optional): For generate_and_optimize_conformers and generate_conformers: Number of SMILES to process per 1GB memory. Defaults to 42.
+                                For optimize_conformers: Number of molecules to process per 1GB memory. Defaults to 1024.
         memory (int, optional): RAM allocation for Auto3D in GB. Defaults to None.
         batchsize_atoms (int, optional): Number of atoms per optimization batch per 1GB. Defaults to 1024.
 
@@ -361,7 +362,8 @@ def _prep_work(**kwargs):
 
 
 def _divide_jobs_based_on_memory(config):
-    smiles_per_G = config.capacity  # Allow 40 SMILES per GB memory
+    # Allow 42 SMILES strings per GB memory by default for generate_and_optimize_conformers
+    smiles_per_G = config.capacity
     num_jobs = 1
     if config.memory is not None:
         t = int(config.memory)
@@ -593,7 +595,7 @@ def generate_conformers(**kwargs):
     """
 
     # Preprocessing work
-    kwargs['k'] = 1 # a workaround
+    kwargs["k"] = 1  # a workaround
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
@@ -649,13 +651,27 @@ def optimize_conformers(**kwargs):
     r"""
     Optimize conformers generated in an sdf file.
     """
-    kwargs["enumerate_isomer"] = False
-    # Preprocessing work
+    kwargs[
+        "enumerate_isomer"
+    ] = False  # to bypass the warning message in check_sdf_format
+    if (
+        "capacity" not in kwargs
+    ):  # default value of number of molecules to process per 1GB memory
+        kwargs["capacity"] = 1024
+
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
     if not config.input_file.endswith(".sdf"):
         sys.exit("Please provide an sdf file for optimization.")
+    if config.capacity < 1024:
+        print(
+            "The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= 1024.",
+            flush=True,
+        )
+        logger.warning(
+            "The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= 1024."
+        )
     config = _divide_jobs_based_on_memory(config)
     if isinstance(config.gpu_idx, int):
         config.gpu_idx = [config.gpu_idx]
@@ -664,7 +680,7 @@ def optimize_conformers(**kwargs):
     # Save the initial .sdf files as divided above
     chunk_info = _save_chunks(config, logger, job_name, path0)
 
-    # This is not pretty, but a quick fix
+    # This is not pretty, but a quick fix following the queueing logic by the original code for Auto3D
     for i, path_dir in enumerate(chunk_info):
         path, directory = path_dir
         chunk_line.put((path, path, directory, i + 1))
