@@ -595,15 +595,13 @@ def generate_conformers(**kwargs):
     """
 
     # Preprocessing work
-    kwargs["k"] = 1  # a workaround
+    kwargs["k"] = 1  # a workaround to avoid the exit message regarding k and window
+    kwargs[
+        "use_gpu"
+    ] = False  # the process of generating isomers and embedding conformers does not utilize GPUs.
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
-    if config.use_gpu:
-        message = "Warning: The process of generating isomers and embedding conformers does not utilize GPUs. Changing 'use_gpu' to False."
-        print(message, flush=True)
-        logger.warning(message)
-        config.use_gpu = False
     config = _divide_jobs_based_on_memory(config)
     chunk_info = _save_chunks(config, logger, job_name, path0)
     start = time.time()

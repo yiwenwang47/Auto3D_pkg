@@ -359,6 +359,7 @@ def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
                 old_name = mol.GetProp("old_name")
                 mol.SetProp("_Name", old_name)
                 mol.SetProp("ID", new_name)
+                mol.ClearProp("old_name")
             else:
                 mol.SetProp("_Name", new_name)
                 id = "_".join(mol.GetProp("ID").strip().split("_")[1:])
