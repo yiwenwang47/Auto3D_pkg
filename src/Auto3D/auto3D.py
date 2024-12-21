@@ -593,6 +593,7 @@ def generate_conformers(**kwargs):
     """
 
     # Preprocessing work
+    kwargs['k'] = 1 # a workaround
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
