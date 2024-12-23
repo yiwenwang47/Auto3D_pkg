@@ -327,14 +327,13 @@ def _prep_work(**kwargs):
     # logger in the main process
     logger = _prepare_logger(logging_queue)
     logger.info(
-        f"""
+        rf"""
          _              _             _____   ____
         / \     _   _  | |_    ___   |___ /  |  _ \
        / _ \   | | | | | __|  / _ \    |_ \  | | | |
       / ___ \  | |_| | | |_  | (_) |  ___) | | |_| |
      /_/   \_\  \__,_|  \__|  \___/  |____/  |____/  {Auto3D.__version__}
-              // Generating low-energy 3D structures
-    """
+              // Generating low-energy 3D structures"""
     )
 
     logger.info(
@@ -409,7 +408,7 @@ def _save_chunks(config, logger, job_name, path0):
     # Get indexes for each chunk
     match input_format:
         case "smi":
-            df = pd.read_csv(path0, sep="\s+", header=None)
+            df = pd.read_csv(path0, sep=r"\s+", header=None)
         case "sdf":
             df = SDF2chunks(path0)
     data_size = len(df)
@@ -649,20 +648,23 @@ def optimize_conformers(**kwargs):
     r"""
     Optimize conformers generated in an sdf file.
     """
+
+    max_conformers_per_GB_memory = 8192
+
     kwargs[
         "enumerate_isomer"
     ] = False  # to bypass the warning message in check_sdf_format
     if (
         "capacity" not in kwargs
     ):  # default value of number of molecules to process per 1GB memory
-        kwargs["capacity"] = 1024
+        kwargs["capacity"] = max_conformers_per_GB_memory
 
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
     )
     if not config.input_file.endswith(".sdf"):
         sys.exit("Please provide an sdf file for optimization.")
-    if config.capacity < 1024:
+    if config.capacity < max_conformers_per_GB_memory:
         print(
             "The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= 1024.",
             flush=True,
