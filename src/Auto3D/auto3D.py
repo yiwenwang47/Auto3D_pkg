@@ -168,8 +168,9 @@ class Config:
         # Output Control
         k (bool, optional): Number of conformers for each molecule. Defaults to None.
         window (bool, optional): Whether to output structures with energies within x kcal/mol from the lowest energy conformer. Defaults to None.
-        verbose (bool, optional): Whether to save all metadata during execution. Defaults to False.
         job_name (str, optional): Name of folder to save metadata. Defaults to "".
+        verbose (bool, optional): Whether to save all metadata during execution. Defaults to False.
+        do_ranking (bool, optional): Whether to rank and filter the conformers based on k and window. Defaults to True.
 
         # Tautomer Settings
         enumerate_tautomer (bool, optional): Whether to enumerate tautomers for input. Defaults to False.
@@ -188,9 +189,9 @@ class Config:
         use_gpu (bool, optional): Whether to use GPU when available. Defaults to True.
         gpu_idx (int or List[int], optional): GPU index(es) to use. Only applies when use_gpu=True. Defaults to 0.
         capacity (int, optional): For generate_and_optimize_conformers and generate_conformers: Number of SMILES to process per 1GB memory. Defaults to 42.
-                                For optimize_conformers: Number of molecules to process per 1GB memory. Defaults to 1024.
+                                For optimize_conformers: Number of molecules to process per 1GB memory. Defaults to 8192.
         memory (int, optional): RAM allocation for Auto3D in GB. Defaults to None.
-        batchsize_atoms (int, optional): Number of atoms per optimization batch per 1GB. Defaults to 1024.
+        batchsize_atoms (int, optional): Number of atoms per optimization batch per 1GB. Defaults to 8192.
 
         # Optimization Parameters
         optimizing_engine (str, optional): Energy calculation and geometry optimization engine.
@@ -223,6 +224,7 @@ class Config:
     opt_steps: int = 5000
     convergence_threshold: float = 0.003
     threshold: float = 0.3
+    do_ranking: bool = True
     memory: Optional[int] = None
     batchsize_atoms: int = 1024
 
@@ -568,7 +570,7 @@ def generate_and_optimize_conformers(**kwargs):
         config=config,
         chunk_line=chunk_line,
         logging_queue=logging_queue,
-        do_ranking=True,
+        do_ranking=config.do_ranking,
     )
     p1.join()
     for p2 in p2s:
@@ -670,11 +672,11 @@ def optimize_conformers(**kwargs):
         sys.exit("Please provide an sdf file for optimization.")
     if config.capacity < max_conformers_per_GB_memory:
         print(
-            "The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= 1024.",
+            f"The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= {max_conformers_per_GB_memory}.",
             flush=True,
         )
         logger.warning(
-            "The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= 1024."
+            f"The capacity (number of molecules per 1GB memory) is too small. Please set it to a value >= {max_conformers_per_GB_memory}."
         )
     config = _divide_jobs_based_on_memory(config)
     if isinstance(config.gpu_idx, int):
@@ -706,15 +708,17 @@ def optimize_conformers(**kwargs):
     path_output = decode_ids(path=path_combined, mapping=mapping, suffix="_optimized")
 
     # Ranking step
-    rank_engine = ranking(
-        input_path=path_output,
-        out_path=path_output,
-        threshold=config.threshold,
-        k=config.k,
-        window=config.window,
-        encoded=False,
-    )
-    rank_engine.run()
+    if config.do_ranking:
+        rank_engine = ranking(
+            input_path=path_output,
+            out_path=path_output,
+            threshold=config.threshold,
+            k=config.k,
+            window=config.window,
+            encoded=False,
+        )
+        rank_engine.run()
+
     path_output = _clean_up(
         path_output,
         logger,
