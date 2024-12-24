@@ -93,9 +93,7 @@ class Calculator(ase.calculators.calculator.Calculator):
 
 
 def get_mol_idx_t1(mol):
-    """Get idx and temperature from openbabel molecule
-    example: /Users/liu5/Documents/tautomer/dG/dG3/DFT_output_analyze2/817-2-473.xyz
-    """
+    """Get idx and temperature from openbabel molecule"""
 
     idx = str(mol).split()[1].strip().split("/")[-1].strip().split(".")[0]
     T = int(idx.split("-")[-1])
@@ -109,10 +107,8 @@ def get_mol_idx_t3(mol):
     return (idx, T)
 
 
-def mol2aimnet_input(
-    mol: Chem.Mol, device=torch.device("cpu"), model_name="AIMNET"
-) -> dict:
-    """Converts sdf to aimnet input, assuming the sdf has only 1 conformer."""
+def mol2aimnet_input(mol: Chem.Mol, device=torch.device("cpu")) -> dict:
+    """Converts mol to aimnet input, assuming the mol has only 1 conformer."""
     conf = mol.GetConformer()
     coord = torch.tensor(conf.GetPositions(), device=device).unsqueeze(0)
     numbers = torch.tensor(

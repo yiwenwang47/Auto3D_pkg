@@ -29,7 +29,7 @@ class ranking(object):
     """
 
     def __init__(
-        self, input_path, out_path, threshold, k=False, window=False, encoded=True
+        self, input_path, out_path, threshold, k=None, window=None, encoded=True
     ):
         r"""
         Args:
@@ -60,6 +60,10 @@ class ranking(object):
         self.k = k
         self.window = window
         self.encoded = encoded
+
+        if window is not None:
+            assert window >= 0
+            self.window_eV = window / ev2kcalpermol  # convert energy window into eV
 
     def get_name(self, name):
         if self.encoded:
@@ -115,35 +119,43 @@ class ranking(object):
                 mol.SetProp("E_rel(eV)", str(rel_energy))
         return out_mols
 
-    def top_window(self, df_group: pd.DataFrame, window: float = 1.0) -> List[Chem.Mol]:
+    def top_window_df(self, df_group: pd.DataFrame, window: float) -> pd.DataFrame:
+        r"""
+        A simple helper function to return the lowest energy structures within a window.
         """
-        Given a group of energy_name_idxes,
-        return all (idx, name, e) tuples whose energies are within
-        window (Hatree) from the lowest energy. Unit table is based on:
-        http://wild.life.nctu.edu.tw/class/common/energy-unit-conv-table.html
-        """
-        window = window / ev2kcalpermol  # convert energy window into eV unit
-        names = list(df_group["name"])
-        assert window >= 0
-        assert len(set(names)) == 1
+
+        assert len(df_group["name"].unique()) == 1
 
         group = df_group.sort_values(by=["energy"], ascending=True).reset_index(
             drop=True
         )
         minimum = group["energy"].min()
         maximum = window + minimum
-        group = group.loc[group["energy"] <= maximum]
+        group = group.loc[group["energy"] <= maximum].copy()
+        return group
 
-        out_mols_ = filter_unique(list(group["mol"]), self.threshold)
+    def top_window(self, df_group: pd.DataFrame, window: float) -> List[Chem.Mol]:
+        """
+        Given a group of energy_name_idxes,
+        return all (idx, name, e) tuples whose energies are within
+        window (eV) from the lowest energy. Unit table is based on:
+        http://wild.life.nctu.edu.tw/class/common/energy-unit-conv-table.html
+        """
+
+        assert len(df_group["name"].unique()) == 1
+
+        group = self.top_window_df(df_group=df_group, window=window)
+
+        out_mols_raw = filter_unique(list(group["mol"]), self.threshold)
         out_mols = []
 
-        if len(out_mols_) == 0:
-            name = names[0].split("_")[0].strip()
+        if len(out_mols_raw) == 0:
+            name = self.get_name(group.iloc[0]["mol"].GetProp("_Name"))
             print(f"No structure converged for {name}.", flush=True)
             logging.info(f"No structure converged for {name}.")
         else:
-            ref_energy = minimum
-            for mol in out_mols_:
+            ref_energy = group["energy"].min()
+            for mol in out_mols_raw:
                 my_energy = float(mol.GetProp("E_tot"))
                 rel_energy = my_energy - ref_energy
                 mol.SetProp("E_rel(eV)", str(rel_energy))
@@ -173,21 +185,25 @@ class ranking(object):
         df = pd.DataFrame({"name": names, "energy": energies, "mol": mols})
 
         df2 = df.groupby("name")
-        for group_name in df2.indices:
-            group = df2.get_group(group_name)
-            group = group.sort_values(by=["energy"], ascending=True).reset_index(
+        for group_name in tqdm(df2.indices):
+            df_group = df2.get_group(group_name)
+            print(
+                f"Processing {len(df_group)} conformers for {group_name}...", flush=True
+            )
+            df_group = df_group.sort_values(by=["energy"], ascending=True).reset_index(
                 drop=True
             )
+            if self.window:
+                df_group = self.top_window_df(df_group=df_group, window=self.window)
             if self.k:
-                top_results = self.top_k(group, self.k)
+                top_results = self.top_k(df_group=df_group, k=self.k)
             elif self.window:
-                top_results = self.top_window(group, self.window)
+                top_results = self.top_window(df_group=df_group, window=self.window)
             else:
                 raise ValueError(
                     (
-                        "Parameter k or window needs to be "
-                        'specified. Append "--k=1" if you'
-                        "only want one structure per SMILES"
+                        "Either k or window needs to be specified."
+                        "Usually, setting '--k=1' satisfies most needs."
                     )
                 )
             results += top_results

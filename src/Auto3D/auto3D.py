@@ -105,12 +105,11 @@ def isomer_wraper(chunk_info, config, queue, logging_queue):
 
 
 def optim_rank_wrapper(
-    config, queue, logging_queue, device: torch.device
+    config, queue, logging_queue, device: torch.device, do_ranking: bool = True
 ) -> List[Chem.Mol]:
 
     logger = _prepare_logger(logging_queue)
 
-    conformers = []
     while True:
         sdf_path_dir_job = queue.get()
         if sdf_path_dir_job == "Done":
@@ -137,15 +136,18 @@ def optim_rank_wrapper(
         optimizer.run()
 
         # Ranking step
-        rank_engine = ranking(
-            input_path=meta["optimized_og"],
-            out_path=meta["output"],
-            threshold=config.threshold,
-            k=config.k,
-            window=config.window,
-            encoded=True,
-        )
-        conformers.append(rank_engine.run())
+        if do_ranking:
+            rank_engine = ranking(
+                input_path=meta["optimized_og"],
+                out_path=meta["output"],
+                threshold=config.threshold,
+                k=config.k,
+                window=config.window,
+                encoded=True,
+            )
+            rank_engine.run()
+        else:
+            shutil.move(meta["optimized_og"], meta["output"])
 
         _clean_up_intermediate_files(
             directory=directory,
@@ -153,8 +155,6 @@ def optim_rank_wrapper(
             output=meta["output"],
             verbose=config.verbose,
         )
-
-    return conformers
 
 
 @dataclass
@@ -486,7 +486,7 @@ def _create_and_run_isomer_gen_process(chunk_info, config, chunk_line, logging_q
     return p1
 
 
-def _create_and_run_opt_processes(config, chunk_line, logging_queue):
+def _create_and_run_opt_processes(config, chunk_line, logging_queue, do_ranking):
     p2s = []
     for idx in config.gpu_idx:
         if config.use_gpu:
@@ -501,6 +501,7 @@ def _create_and_run_opt_processes(config, chunk_line, logging_queue):
                     "queue": chunk_line,
                     "logging_queue": logging_queue,
                     "device": device,
+                    "do_ranking": do_ranking,
                 },
             )
         )
@@ -564,7 +565,10 @@ def generate_and_optimize_conformers(**kwargs):
         logging_queue=logging_queue,
     )
     p2s = _create_and_run_opt_processes(
-        config=config, chunk_line=chunk_line, logging_queue=logging_queue
+        config=config,
+        chunk_line=chunk_line,
+        logging_queue=logging_queue,
+        do_ranking=True,
     )
     p1.join()
     for p2 in p2s:
@@ -572,9 +576,6 @@ def generate_and_optimize_conformers(**kwargs):
 
     # Combine output files from the jobs into a single sdf
     path_combined = _combine_sdfs(job_name, path0)
-    # Program ends
-    end = time.time()
-    _print_timing(start, end, logger)
     reorder_sdf(sdf=path_combined, source=path0)
     path_output = decode_ids(path=path_combined, mapping=mapping)
     path_output = _clean_up(
@@ -585,6 +586,9 @@ def generate_and_optimize_conformers(**kwargs):
         output_file=config.output_file,
         verbose=config.verbose,
     )
+    # Program ends
+    end = time.time()
+    _print_timing(start, end, logger)
     return path_output
 
 
@@ -616,10 +620,6 @@ def generate_conformers(**kwargs):
     path_combined = _combine_sdfs(
         job_name, path0, input_suffix="_enumerated.sdf", output_suffix="_conformers.sdf"
     )
-
-    # Program ends
-    end = time.time()
-    _print_timing(start, end, logger)
     reorder_sdf(sdf=path_combined, source=path0, clean_suffix=True)
     path_output = decode_ids(path=path_combined, mapping=mapping, suffix="_conformers")
     for _, directory in chunk_info:
@@ -640,6 +640,10 @@ def generate_conformers(**kwargs):
         output_file=config.output_file,
         verbose=config.verbose,
     )
+
+    # Program ends
+    end = time.time()
+    _print_timing(start, end, logger)
 
     return path_output
 
@@ -688,21 +692,20 @@ def optimize_conformers(**kwargs):
         chunk_line.put("Done")
 
     p2s = _create_and_run_opt_processes(
-        config=config, chunk_line=chunk_line, logging_queue=logging_queue
+        config=config,
+        chunk_line=chunk_line,
+        logging_queue=logging_queue,
+        do_ranking=False,
     )
     for p2 in p2s:
         p2.join()
 
     # Combine output files from the jobs into a single sdf
     path_combined = _combine_sdfs(job_name, path0)
-
-    # Program ends
-    end = time.time()
-    _print_timing(start, end, logger)
     reorder_sdf(sdf=path_combined, source=path0)
     path_output = decode_ids(path=path_combined, mapping=mapping, suffix="_optimized")
 
-    # Rank again to deal with the case where conformers of the same molecule are assigned to different jobs
+    # Ranking step
     rank_engine = ranking(
         input_path=path_output,
         out_path=path_output,
@@ -720,6 +723,10 @@ def optimize_conformers(**kwargs):
         output_file=config.output_file,
         verbose=config.verbose,
     )
+
+    # Program ends
+    end = time.time()
+    _print_timing(start, end, logger)
 
     return path_output
 

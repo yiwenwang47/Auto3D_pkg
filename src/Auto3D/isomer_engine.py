@@ -204,7 +204,7 @@ class rd_isomer(object):
             randomSeed=42,
             numThreads=self.np,
             pruneRmsThresh=self.threshold,
-            maxAttempts=10,
+            maxAttempts=10,  # https://github.com/rdkit/rdkit/discussions/6804
         )
 
         return mol
