@@ -28,12 +28,14 @@ torch.backends.cudnn.allow_tf32 = False
 
 @torch.jit.script
 class FIRE:
-    """a general optimization program
-    # Implementation based on:
-    # Guénolé, Julien, et al. Computational Materials Science 175 (2020): 109584.
+    r"""
+    A general optimization program.
+
+    Implementation based on:
+    #Guénolé, Julien, et al. Computational Materials Science 175 (2020): 109584.
     """
 
-    def __init__(self, coord):
+    def __init__(self, shape, device=torch.device("cpu")):
         ## default parameters
         self.dt_max = 0.1
         self.Nmin = 5
@@ -42,10 +44,18 @@ class FIRE:
         self.fdec = 0.7
         self.astart = 0.1
         self.fa = 0.99
-        self.v = torch.zeros_like(coord)
-        self.Nsteps = torch.zeros(coord.shape[0], dtype=torch.long, device=coord.device)
-        self.dt = torch.full(coord.shape[:1], 0.1, device=coord.device)
-        self.a = torch.full(coord.shape[:1], 0.1, device=coord.device)
+
+        self.v = torch.zeros(*shape, 3, device=device)
+        self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
+        self.dt = torch.full((shape[0],), 0.1, device=device)
+        self.a = torch.full((shape[0],), 0.1, device=device)
+
+    def to(self, device):
+        self.v = self.v.to(device)
+        self.Nsteps = self.Nsteps.to(device)
+        self.dt = self.dt.to(device)
+        self.a = self.a.to(device)
+        return self
 
     def __call__(self, coord, forces):
         """Moving atoms based on forces
@@ -240,7 +250,7 @@ def n_steps(state, n, opttol, patience):
     numbers = state["numbers"]
     charges = state["charges"]
     coord = state["coord"]
-    optimizer = FIRE(coord)
+    optimizer = FIRE(shape=coord.shape, device=coord.device)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
