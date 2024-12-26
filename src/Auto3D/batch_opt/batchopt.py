@@ -353,14 +353,13 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
     )  # size=N, a tensored filled with 999.0, representing the current maximum forces at each conformer.
     energy = torch.full(coord.shape[:1], 999.0, dtype=torch.double, device=coord.device)
     ids = torch.arange(coord.shape[0], device=coord.device)  # Returns a 1D tensor
-    # optimizer = FIRE(coord)
 
     state = dict(
         # ids=ids,
         coord=coord,
         numbers=numbers,
+        charges=charges,
         converged_mask=converged_mask,
-        # optimizer=optimizer, nn=net, fmax=fmax, energy=energy,
         nn=net,
         fmax=fmax,
         energy=energy,
