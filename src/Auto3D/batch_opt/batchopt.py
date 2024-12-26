@@ -1,5 +1,6 @@
 # Original source: /labspace/models/aimnet/batch_opt_script/
 import os
+from typing import Optional, Tuple
 
 import numpy as np
 import torch
@@ -35,7 +36,9 @@ class FIRE:
     #Guénolé, Julien, et al. Computational Materials Science 175 (2020): 109584.
     """
 
-    def __init__(self, shape, device=torch.device("cpu")):
+    def __init__(
+        self, shape: Tuple[int], device: Optional[torch.device] = torch.device("cpu")
+    ):
         ## default parameters
         self.dt_max = 0.1
         self.Nmin = 5
@@ -45,10 +48,10 @@ class FIRE:
         self.astart = 0.1
         self.fa = 0.99
 
-        self.v = torch.zeros(*shape, 3, device=device)
+        self.v = torch.zeros(*shape, device=device)
         self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
-        self.dt = torch.full((shape[0],), 0.1, device=device)
-        self.a = torch.full((shape[0],), 0.1, device=device)
+        self.dt = torch.full(shape[:1], 0.1, device=device)
+        self.a = torch.full(shape[:1], 0.1, device=device)
 
     def to(self, device):
         self.v = self.v.to(device)
@@ -57,7 +60,7 @@ class FIRE:
         self.a = self.a.to(device)
         return self
 
-    def __call__(self, coord, forces):
+    def __call__(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
         """Moving atoms based on forces
 
         Arguments:
@@ -250,7 +253,7 @@ def n_steps(state, n, opttol, patience):
     numbers = state["numbers"]
     charges = state["charges"]
     coord = state["coord"]
-    optimizer = FIRE(shape=coord.shape, device=coord.device)
+    optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
