@@ -209,7 +209,7 @@ def print_stats(state, patience):
     num_total = numbers.size()[0]
     num_converged_dropped = torch.sum(state["converged_mask"]).to("cpu")
     oscillating_count = (
-        state["oscilating_count"]
+        state["oscillating_count"]
         .to("cpu")
         .reshape(
             -1,
@@ -245,15 +245,15 @@ def n_steps(state, n, opttol, patience):
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
     )
-    oscilating_count0 = torch.tensor(np.zeros((len(coord), 1)), dtype=torch.float).to(
+    oscillating_count0 = torch.tensor(np.zeros((len(coord), 1)), dtype=torch.float).to(
         coord.device
     )
-    state["oscilating_count"] = oscilating_count0
+    state["oscillating_count"] = oscillating_count0
     assert len(coord.shape) == 3
     assert len(numbers.shape) == 2
     assert len(charges.shape) == 1
     assert len(smallest_fmax0.shape) == 2
-    assert len(oscilating_count0.shape) == 2
+    assert len(oscillating_count0.shape) == 2
     for istep in tqdm(range(1, (n + 1), 1)):
         not_converged = ~state["converged_mask"]  # Essential tracker handle, size fixed
         # stop optimization if all structures converged.
@@ -264,7 +264,7 @@ def n_steps(state, n, opttol, patience):
         numbers = state["numbers"][not_converged]
         charges = state["charges"][not_converged]
         smallest_fmax = smallest_fmax0[not_converged]
-        oscilating_count = state["oscilating_count"][not_converged]
+        oscillating_count = state["oscillating_count"][not_converged]
 
         coord.requires_grad_(True)
         e, f = state["nn"].forward_batched(
@@ -286,14 +286,14 @@ def n_steps(state, n, opttol, patience):
         )
         smallest_fmax[fmax_reduced] = fmax.reshape(-1, 1)[fmax_reduced]
         # reduce count to 0 for reducing; raise count for non-reducing
-        oscilating_count[fmax_reduced] = 0
+        oscillating_count[fmax_reduced] = 0
         fmax_not_reduced = ~fmax_reduced
-        oscilating_count += fmax_not_reduced.reshape(-1, 1)
-        not_oscilating = oscilating_count < patience
-        not_oscilating = not_oscilating.reshape(
+        oscillating_count += fmax_not_reduced.reshape(-1, 1)
+        not_oscillating = oscillating_count < patience
+        not_oscillating = not_oscillating.reshape(
             -1,
         )
-        not_converged_post = not_converged_post1 & not_oscilating
+        not_converged_post = not_converged_post1 & not_oscillating
 
         optimizer.clean(not_converged_post)  # Subset v, a in FIRE for next optimization
 
@@ -316,9 +316,9 @@ def n_steps(state, n, opttol, patience):
         smallest_fmax0[
             not_converged
         ] = smallest_fmax  # update smalles_fmax for each conformer
-        state["oscilating_count"][
+        state["oscillating_count"][
             not_converged
-        ] = oscilating_count  # update counts for continuous no reduction in fmax
+        ] = oscillating_count  # update counts for continuous no reduction in fmax
 
         if (istep % (n // 10)) == 0:
             print_stats(state, patience)
@@ -331,7 +331,7 @@ def n_steps(state, n, opttol, patience):
     print_stats(state, patience)
 
 
-def ensemble_opt(net, coord, numbers, charges, param, model, device):
+def ensemble_opt(net, coord, numbers, charges, param, device):
     """Optimizing a group of molecules
 
     Arguments:
@@ -356,7 +356,7 @@ def ensemble_opt(net, coord, numbers, charges, param, model, device):
     # optimizer = FIRE(coord)
 
     state = dict(
-        ids=ids,
+        # ids=ids,
         coord=coord,
         numbers=numbers,
         converged_mask=converged_mask,
@@ -364,23 +364,18 @@ def ensemble_opt(net, coord, numbers, charges, param, model, device):
         nn=net,
         fmax=fmax,
         energy=energy,
-        timing=defaultdict(float),
-        charges=charges,
-        he=list(),
-        close=list(),  # !!! he and close?
+        # timing=defaultdict(float),
     )
 
     n_steps(state, param["opt_steps"], param["opttol"], param["patience"])
 
     return dict(
         coord=state["coord"].tolist(),
-        ids=state["ids"].tolist(),
+        # ids=state["ids"].tolist(),
         energy=state["energy"].tolist(),
         fmax=state["fmax"].tolist(),
-        he=state["he"],
-        close=state["close"],
-        timing=dict(state["timing"]),
-        numbers=state["numbers"].tolist(),
+        # timing=dict(state["timing"]),
+        # numbers=state["numbers"].tolist(),
     )
 
 
@@ -416,8 +411,7 @@ def padding_species(lists, pad_value=-1):
 
 def mols2lists(mols, model):
     """mols: rdkit mol object"""
-    species_order = ("H", "C", "N", "O", "S", "F", "Cl")
-    ani2xt_index = {1: 0, 6: 1, 7: 2, 8: 3, 9: 4, 16: 5, 17: 6}
+    ani2xt_index = {1: 0, 6: 1, 7: 2, 8: 3, 9: 4, 16: 5, 17: 6}  # H, C, N, O, F, S, Cl
     coord = [mol.GetConformer().GetPositions().tolist() for mol in mols]
     coord = [
         [tuple(xyz) for xyz in inner] for inner in coord
@@ -469,7 +463,8 @@ class optimizing(object):
     def run(self):
         print(
             "Preparing for parallel optimizing... (Max optimization steps: %i)"
-            % self.config["opt_steps"]
+            % self.config["opt_steps"],
+            flush=True,
         )
         # logging.info("Preparing for parallel optimizing... (Max optimization steps: %i)" % self.config["opt_steps"])
         mols = list(Chem.SDMolSupplier(self.in_f, removeHs=False))
@@ -483,17 +478,16 @@ class optimizing(object):
             p.requires_grad_(False)
         model = EnForce_ANI(
             self.model, self.name, self.config["batchsize_atoms"]
-        )  # Interesting, EnForce_ANI inherites nn.module, bu can still accept a ScriptModule object as the input
+        )  # Interestingly, EnForce_ANI inherits nn.module, bu can still accept a ScriptModule object as the input
 
-        with torch.jit.optimized_execution(False):
+        with torch.jit.optimized_execution(True):
             optdict = ensemble_opt(
-                model,
-                coord_padded,
-                numbers_padded,
-                charges,
-                self.config,
-                self.name,
-                self.device,
+                net=model,
+                coord=coord_padded,
+                numbers=numbers_padded,
+                charges=charges,
+                param=self.config,
+                device=self.device,
             )  # Magic step
 
         energies = optdict["energy"]
