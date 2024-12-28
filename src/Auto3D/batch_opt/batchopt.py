@@ -83,7 +83,7 @@ class FIRE:
             ).unsqueeze(
                 -1
             )
-            self.Nsteps += 1
+            #self.Nsteps += 1
         elif w_vf.any():
             a = self.a[w_vf].unsqueeze(-1).unsqueeze(-1)
             v = self.v[w_vf]
@@ -102,7 +102,7 @@ class FIRE:
             w_vfN = w_vf & w_N
             self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(max=self.dt_max)
             self.a[w_vfN] *= self.fa
-            self.Nsteps[w_vfN] += 1
+        self.Nsteps[w_vf] += 1
 
         w_vf = ~w_vf
         if w_vf.all():
