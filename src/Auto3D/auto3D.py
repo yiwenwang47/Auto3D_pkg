@@ -542,7 +542,7 @@ def _clean_up(path_output, logger, logging_queue, job_name, output_file, verbose
         try:
             shutil.rmtree(job_name)
         except:
-            pass
+            print(f"Failed to remove the following folder: {job_name}.", flush=True)
 
     print(f"Output path: {path_output}", flush=True)
     logger.info(f"Output path: {path_output}")
