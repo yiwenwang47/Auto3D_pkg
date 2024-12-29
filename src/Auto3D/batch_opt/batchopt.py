@@ -98,10 +98,13 @@ class FIRE:
                 -1
             )
 
-            w_N = self.Nsteps > self.Nmin
-            w_vfN = w_vf & w_N
-            self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(max=self.dt_max)
-            self.a[w_vfN] *= self.fa
+	# Update alpha (a) and delta_t (dt) accordingly
+        w_N = self.Nsteps > self.Nmin
+        w_vfN = w_vf & w_N
+        self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(max=self.dt_max)
+        self.a[w_vfN] *= self.fa
+
+	# Update Nsteps
         self.Nsteps[w_vf] += 1
 
         w_vf = ~w_vf
