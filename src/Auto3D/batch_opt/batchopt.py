@@ -83,7 +83,7 @@ class FIRE:
             ).unsqueeze(
                 -1
             )
-            #self.Nsteps += 1
+            # self.Nsteps += 1
         elif w_vf.any():
             a = self.a[w_vf].unsqueeze(-1).unsqueeze(-1)
             v = self.v[w_vf]
@@ -98,14 +98,16 @@ class FIRE:
                 -1
             )
 
-	# Update alpha (a) and delta_t (dt) accordingly
+        # Update alpha (a) and delta_t (dt) accordingly
         w_N = self.Nsteps > self.Nmin
         w_vfN = w_vf & w_N
-        self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(max=self.dt_max)
-        self.a[w_vfN] *= self.fa
+        self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(
+            max=self.dt_max
+        )  # Algorithm 2, line 13
+        self.a[w_vfN] *= self.fa  # Algorithm 2, line 14
 
-	# Update Nsteps
-        self.Nsteps[w_vf] += 1
+        # Update Nsteps
+        self.Nsteps[w_vf] += 1  # Algorithm 2, line 10
 
         w_vf = ~w_vf
         if w_vf.all():
