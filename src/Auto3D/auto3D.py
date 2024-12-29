@@ -536,7 +536,14 @@ def _clean_up(path_output, logger, logging_queue, job_name, output_file, verbose
         shutil.move(path_output, output_file)
         path_output = output_file
     if not verbose:
-        shutil.rmtree(job_name)
+        for file in glob.glob(f"{job_name}/*"):
+            if file != path_output and not os.path.isdir(file):
+                os.remove(file)
+        try:
+            shutil.rmtree(job_name)
+        except:
+            pass
+
     print(f"Output path: {path_output}", flush=True)
     logger.info(f"Output path: {path_output}")
     logging_queue.put(None)
