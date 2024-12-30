@@ -1,6 +1,6 @@
 # Original source: /labspace/models/aimnet/batch_opt_script/
 import os
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -350,7 +350,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
 
 
 def ensemble_opt(
-    net: torch.nn.Module,
+    net: Any,
     coord: List[List[float]],
     numbers: List[int],
     charges: List[int],
