@@ -350,7 +350,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
 
 
 def ensemble_opt(
-    net: EnForce_ANI,
+    net: torch.nn.Module,
     coord: List[List[float]],
     numbers: List[int],
     charges: List[int],
