@@ -1,6 +1,6 @@
 # Original source: /labspace/models/aimnet/batch_opt_script/
 import os
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import torch
@@ -246,7 +246,7 @@ def print_stats(state, patience):
     #       (num_total, num_converged, num_dropped, num_active))
 
 
-def n_steps(state, n, opttol, patience):
+def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     """Doing n steps optimization for each input. Only converged structures are
     modified at each step. n_steps does not change input conformer order.
 
@@ -349,7 +349,14 @@ def n_steps(state, n, opttol, patience):
     print_stats(state, patience)
 
 
-def ensemble_opt(net, coord, numbers, charges, param, device):
+def ensemble_opt(
+    net: EnForce_ANI,
+    coord: List[List[float]],
+    numbers: List[int],
+    charges: List[int],
+    param: dict,
+    device: torch.device,
+):
     """Optimizing a group of molecules
 
     Arguments:
@@ -372,7 +379,6 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
     energy = torch.full(coord.shape[:1], 999.0, dtype=torch.double, device=coord.device)
 
     state = dict(
-        # ids=ids,
         coord=coord,
         numbers=numbers,
         charges=charges,
@@ -383,7 +389,12 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
         # timing=defaultdict(float),
     )
 
-    n_steps(state, param["opt_steps"], param["opttol"], param["patience"])
+    n_steps(
+        state=state,
+        n=param["opt_steps"],
+        opttol=param["opttol"],
+        patience=param["patience"],
+    )
 
     return dict(
         coord=state["coord"].tolist(),
