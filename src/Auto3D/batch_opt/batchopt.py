@@ -27,7 +27,7 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 
-@torch.jit.script
+# @torch.jit.script
 class FIRE:
     r"""
     A general optimization program.
@@ -349,6 +349,7 @@ def n_steps(state, n, opttol, patience):
     print_stats(state, patience)
 
 
+@torch.compile
 def ensemble_opt(net, coord, numbers, charges, param, device):
     """Optimizing a group of molecules
 
@@ -370,7 +371,6 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
         coord.shape[:1], 999.0, device=coord.device
     )  # size=N, a tensored filled with 999.0, representing the current maximum forces at each conformer.
     energy = torch.full(coord.shape[:1], 999.0, dtype=torch.double, device=coord.device)
-    ids = torch.arange(coord.shape[0], device=coord.device)  # Returns a 1D tensor
 
     state = dict(
         # ids=ids,
@@ -388,11 +388,9 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
 
     return dict(
         coord=state["coord"].tolist(),
-        # ids=state["ids"].tolist(),
         energy=state["energy"].tolist(),
         fmax=state["fmax"].tolist(),
         # timing=dict(state["timing"]),
-        # numbers=state["numbers"].tolist(),
     )
 
 
@@ -433,7 +431,6 @@ def mols2lists(mols, model):
     coord = [
         [tuple(xyz) for xyz in inner] for inner in coord
     ]  # to be consistent with legacy code
-    # charges = [mol.charge for mol in mols]
     charges = [rdmolops.GetFormalCharge(mol) for mol in mols]
 
     if model == "ANI2xt":
@@ -496,8 +493,9 @@ class optimizing(object):
         model = EnForce_ANI(
             self.model, self.name, self.config["batchsize_atoms"]
         )  # Interestingly, EnForce_ANI inherits nn.module, bu can still accept a ScriptModule object as the input
+        model = torch.compile(model)
 
-        with torch.jit.optimized_execution(True):
+        with torch.jit.optimized_execution(False):
             optdict = ensemble_opt(
                 net=model,
                 coord=coord_padded,
