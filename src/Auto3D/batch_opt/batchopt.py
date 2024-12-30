@@ -349,7 +349,6 @@ def n_steps(state, n, opttol, patience):
     print_stats(state, patience)
 
 
-@torch.compile
 def ensemble_opt(net, coord, numbers, charges, param, device):
     """Optimizing a group of molecules
 
@@ -392,6 +391,28 @@ def ensemble_opt(net, coord, numbers, charges, param, device):
         fmax=state["fmax"].tolist(),
         # timing=dict(state["timing"]),
     )
+
+
+def optimize_ensemble_opt():
+    if torch.cuda.is_available():
+        # Get CUDA capability of the current device
+        major, minor = torch.cuda.get_device_capability()
+        print(f"CUDA Capability: {major}.{minor}", flush=True)
+
+        if major >= 7:  # Check if CUDA capability is 7 or greater
+            print("Using torch.compile for optimization.", flush=True)
+            return torch.compile(ensemble_opt)  # Optimize using TorchDynamo
+        else:
+            print("Using torch.jit.script for optimization.", flush=True)
+            return torch.jit.script(ensemble_opt)  # Fallback to TorchScript
+    else:
+        print(
+            "CUDA is not available. Using CPUs with no torch optimization.", flush=True
+        )
+        return ensemble_opt  # Use plain train function on CPU
+
+
+optimized_ensemble_opt = optimize_ensemble_opt()
 
 
 def padding_coords(lists, pad_value=0.0):
@@ -476,7 +497,7 @@ class optimizing(object):
 
     def run(self):
         print(
-            "Preparing for parallel optimizing... (Max optimization steps: %i)"
+            "Preparing for parallel optimization... (Max optimization steps: %i)"
             % self.config["opt_steps"],
             flush=True,
         )
@@ -493,17 +514,16 @@ class optimizing(object):
         model = EnForce_ANI(
             self.model, self.name, self.config["batchsize_atoms"]
         )  # Interestingly, EnForce_ANI inherits nn.module, bu can still accept a ScriptModule object as the input
-        model = torch.compile(model)
 
-        with torch.jit.optimized_execution(False):
-            optdict = ensemble_opt(
-                net=model,
-                coord=coord_padded,
-                numbers=numbers_padded,
-                charges=charges,
-                param=self.config,
-                device=self.device,
-            )  # Magic step
+        # with torch.jit.optimized_execution(False):
+        optdict = optimized_ensemble_opt(
+            net=model,
+            coord=coord_padded,
+            numbers=numbers_padded,
+            charges=charges,
+            param=self.config,
+            device=self.device,
+        )  # Magic step
 
         energies = optdict["energy"]
         fmax = optdict["fmax"]
