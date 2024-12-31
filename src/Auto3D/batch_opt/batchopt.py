@@ -1,6 +1,6 @@
 # Original source: /labspace/models/aimnet/batch_opt_script/
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -30,7 +30,12 @@ _compile_opt = False
 if torch.cuda.is_available():
     major, minor = torch.cuda.get_device_capability()
     if major >= 7:  # Check if CUDA capability is 7 or greater
-        _compile_opt = True
+        try:
+            import triton
+
+            _compile_opt = True
+        except:
+            pass
 
 # @torch.jit.script
 class FIRE(nn.Module):
