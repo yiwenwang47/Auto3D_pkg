@@ -28,15 +28,15 @@ torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
 _compile_opt = False
-if torch.cuda.is_available():
-    major, minor = torch.cuda.get_device_capability()
-    if major >= 7:  # Check if CUDA capability is 7 or greater
-        try:
-            import triton
+# if torch.cuda.is_available():
+#     major, minor = torch.cuda.get_device_capability()
+#     if major >= 7:  # Check if CUDA capability is 7 or greater
+#         try:
+#             import triton
 
-            _compile_opt = True
-        except:
-            pass
+#             _compile_opt = True
+#         except:
+#             pass
 
 
 class FIRE(nn.Module):
