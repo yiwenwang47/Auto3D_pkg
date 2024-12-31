@@ -59,13 +59,18 @@ class FIRE(nn.Module):
         self.fdec = 0.7
         self.astart = 0.1
         self.fa = 0.99
-
-        self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
-        self.Nsteps = Attribute(
-            torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
-        )
-        self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
-        self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+        if not _compile_opt:
+            self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
+            self.Nsteps = Attribute(
+                torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
+            )
+            self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+            self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+        else:
+            self.v = torch.zeros(*shape, device=device)
+            self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
+            self.dt = torch.full(shape[:1], 0.1, device=device)
+            self.a = torch.full(shape[:1], 0.1, device=device)
         for param in self.parameters():
             param.requires_grad = False
 
