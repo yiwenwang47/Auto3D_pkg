@@ -386,13 +386,6 @@ def _divide_jobs_based_on_memory(config):
     # batchsize_atoms based on GPU memory
     config.t = t
     config.batchsize_atoms = config.batchsize_atoms * t
-
-    # TO BE DELETED
-    ####################
-    # num_jobs = 2
-    # chunk_size = 4
-    ####################
-
     config.num_jobs, config.chunk_size = num_jobs, chunk_size
     return config
 
