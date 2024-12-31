@@ -143,9 +143,7 @@ class FIRE:
         return True
 
 
-if _compile_opt:
-    FIRE = torch.compile(FIRE)
-else:
+if not _compile_opt:
     FIRE = torch.jit.script(FIRE)
 
 
@@ -208,7 +206,6 @@ class EnForce_ANI(torch.nn.Module):
 
         return e, f
 
-    #    @torch.jit.script_method
     def forward_batched(self, coord, numbers, charges):
         """Calculate the energies and forces for input molecules.
 
@@ -271,6 +268,8 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     charges = state["charges"]
     coord = state["coord"]
     optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
+    if _compile_opt:
+        optimizer = torch.compile(optimizer)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
