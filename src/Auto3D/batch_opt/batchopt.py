@@ -268,8 +268,6 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     charges = state["charges"]
     coord = state["coord"]
     optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
-    if _compile_opt:
-        optimizer = torch.compile(optimizer)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
@@ -358,6 +356,10 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         print(f"Optimization finished at step {istep}:   ", end="")
         # logging.info(f"Optimization finished at step {istep}:   ")
     print_stats(state, patience)
+
+
+if _compile_opt:
+    n_steps = torch.compile(n_steps)
 
 
 def ensemble_opt(
