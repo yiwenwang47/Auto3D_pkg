@@ -5,6 +5,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 from torch import nn
+from torch.jit import Attribute
 
 try:
     import torchani
@@ -37,7 +38,7 @@ if torch.cuda.is_available():
         except:
             pass
 
-# @torch.jit.script
+
 class FIRE(nn.Module):
     r"""
     A general optimization program.
@@ -59,19 +60,14 @@ class FIRE(nn.Module):
         self.astart = 0.1
         self.fa = 0.99
 
-        self.v = torch.zeros(*shape, device=device)
-        self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
-        self.dt = torch.full(shape[:1], 0.1, device=device)
-        self.a = torch.full(shape[:1], 0.1, device=device)
+        self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
+        self.Nsteps = Attribute(
+            torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
+        )
+        self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+        self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
         for param in self.parameters():
             param.requires_grad = False
-
-    def to(self, device):
-        self.v = self.v.to(device)
-        self.Nsteps = self.Nsteps.to(device)
-        self.dt = self.dt.to(device)
-        self.a = self.a.to(device)
-        return self
 
     def forward(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
         """Moving atoms based on forces
@@ -141,16 +137,15 @@ class FIRE(nn.Module):
         dr *= (self.maxstep / normdr).clamp(max=1.0)
         return coord + dr
 
-    def clean(self, mask):
-        # types: (Tensor) -> bool
+    @torch.jit.export
+    def clean(self, mask: torch.Tensor):
         self.v = self.v[mask]
         self.Nsteps = self.Nsteps[mask]
         self.dt = self.dt[mask]
         self.a = self.a[mask]
-        return True
 
 
-class EnForce_ANI(torch.nn.Module):
+class EnForce_ANI(nn.Module):
     """Takes in an torch model, then defines two forward functions for it.
     The input model should be able to calculate energy and disp_energy given
     coordiantes, species and charges of a molecule.
