@@ -305,8 +305,8 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
             coord, numbers, charges
         )  # Key step to calculate all energies and forces.
         coord.requires_grad_(False)
-
-        coord = optimizer(coord, f)
+        with torch.no_grad():
+            coord = optimizer(coord, f)
         fmax = f.norm(dim=-1).max(dim=-1)[
             0
         ]  # Tensor, Norm is the length of each vector. Here it returns the maximum force length for ecah conformer. Size (100)
