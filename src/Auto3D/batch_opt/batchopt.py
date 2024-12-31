@@ -28,13 +28,12 @@ torch.backends.cudnn.allow_tf32 = False
 
 _compile_opt = False
 if torch.cuda.is_available():
-    # Get CUDA capability of the current device
     major, minor = torch.cuda.get_device_capability()
     if major >= 7:  # Check if CUDA capability is 7 or greater
         _compile_opt = True
 
 # @torch.jit.script
-class FIRE:
+class FIRE(nn.Module):
     r"""
     A general optimization program.
 
@@ -45,6 +44,7 @@ class FIRE:
     def __init__(
         self, shape: Tuple[int], device: Optional[torch.device] = torch.device("cpu")
     ):
+        super(FIRE, self).__init__()
         ## default parameters
         self.dt_max = 0.1
         self.Nmin = 5
@@ -58,6 +58,8 @@ class FIRE:
         self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
         self.dt = torch.full(shape[:1], 0.1, device=device)
         self.a = torch.full(shape[:1], 0.1, device=device)
+        for param in self.parameters():
+            param.requires_grad = False
 
     def to(self, device):
         self.v = self.v.to(device)
@@ -66,7 +68,7 @@ class FIRE:
         self.a = self.a.to(device)
         return self
 
-    def __call__(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
+    def forward(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
         """Moving atoms based on forces
 
         Arguments:
@@ -141,10 +143,6 @@ class FIRE:
         self.dt = self.dt[mask]
         self.a = self.a[mask]
         return True
-
-
-if not _compile_opt:
-    FIRE = torch.jit.script(FIRE)
 
 
 class EnForce_ANI(torch.nn.Module):
@@ -268,6 +266,10 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     charges = state["charges"]
     coord = state["coord"]
     optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
+    if _compile_opt:
+        optimizer = torch.compile(optimizer)
+    else:
+        optimizer = torch.jit.script(optimizer)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
