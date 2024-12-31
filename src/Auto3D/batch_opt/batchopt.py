@@ -30,9 +30,7 @@ _compile_opt = False
 if torch.cuda.is_available():
     # Get CUDA capability of the current device
     major, minor = torch.cuda.get_device_capability()
-    print(f"CUDA Capability: {major}.{minor}", flush=True)
     if major >= 7:  # Check if CUDA capability is 7 or greater
-        print("Using torch.compile for optimization.", flush=True)
         _compile_opt = True
 
 # @torch.jit.script
@@ -145,7 +143,9 @@ class FIRE:
         return True
 
 
-if not _compile_opt:
+if _compile_opt:
+    FIRE = torch.compile(FIRE)
+else:
     FIRE = torch.jit.script(FIRE)
 
 
@@ -414,10 +414,6 @@ def ensemble_opt(
         fmax=state["fmax"].tolist(),
         # timing=dict(state["timing"]),
     )
-
-
-if _compile_opt:
-    ensemble_opt = torch.compile(ensemble_opt)
 
 
 def padding_coords(lists, pad_value=0.0):
