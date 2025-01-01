@@ -1,11 +1,13 @@
 # Original source: /labspace/models/aimnet/batch_opt_script/
 import os
+import sys
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.jit import Attribute
+from torch.profiler import ProfilerActivity, profile, record_function
 
 try:
     import torchani
@@ -280,11 +282,23 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         smallest_fmax = smallest_fmax0[not_converged]
         oscillating_count = state["oscillating_count"][not_converged]
 
-        coord.requires_grad_(True)
-        e, f = state["nn"].forward_batched(
-            coord, numbers, charges
-        )  # Key step to calculate all energies and forces.
-        coord.requires_grad_(False)
+        with profile(
+            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_flops=True
+        ) as prof:
+            with record_function("model_inference"):
+
+                coord.requires_grad_(True)
+                e, f = state["nn"].forward_batched(
+                    coord, numbers, charges
+                )  # Key step to calculate all energies and forces.
+                coord.requires_grad_(False)
+
+        total_flops = sum(
+            entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
+        )
+        print(f"Total FLOPs: {total_flops}", flush=True)
+        sys.exit(0)
+
         with torch.no_grad():
             coord = optimizer(coord, f)
         fmax = f.norm(dim=-1).max(dim=-1)[
