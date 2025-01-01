@@ -191,7 +191,7 @@ class Config:
         capacity (int, optional): For generate_and_optimize_conformers and generate_conformers: Number of SMILES to process per 1GB memory. Defaults to 42.
                                 For optimize_conformers: Number of molecules to process per 1GB memory. Defaults to 8192.
         memory (int, optional): RAM allocation for Auto3D in GB. Defaults to None.
-        batchsize_atoms (int, optional): Number of atoms per optimization batch per 1GB. Defaults to 8192.
+        batchsize_atoms (int, optional): Number of atoms per optimization batch per 1GB. Defaults to 1024.
 
         # Optimization Parameters
         optimizing_engine (str, optional): Energy calculation and geometry optimization engine.
