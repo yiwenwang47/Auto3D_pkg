@@ -297,8 +297,8 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         total_flops = sum(
             entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
         )
-        # print(f"Total FLOPs: {total_flops}", flush=True)
-        logging.info(f"Total FLOPs: {total_flops}")
+        print(f"Total FLOPs: {total_flops}", flush=True)
+        # logging.info(f"Total FLOPs: {total_flops}")
         break
 
         with torch.no_grad():
