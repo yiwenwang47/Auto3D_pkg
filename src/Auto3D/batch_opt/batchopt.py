@@ -27,17 +27,6 @@ from Auto3D.utils import hartree2ev
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
-_compile_opt = False
-# if torch.cuda.is_available():
-#     major, minor = torch.cuda.get_device_capability()
-#     if major >= 7:  # Check if CUDA capability is 7 or greater
-#         try:
-#             import triton
-
-#             _compile_opt = True
-#         except:
-#             pass
-
 
 class FIRE(nn.Module):
     r"""
@@ -59,18 +48,12 @@ class FIRE(nn.Module):
         self.fdec = 0.7
         self.astart = 0.1
         self.fa = 0.99
-        if not _compile_opt:
-            self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
-            self.Nsteps = Attribute(
-                torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
-            )
-            self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
-            self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
-        else:
-            self.v = torch.zeros(*shape, device=device)
-            self.Nsteps = torch.zeros(shape[0], dtype=torch.long, device=device)
-            self.dt = torch.full(shape[:1], 0.1, device=device)
-            self.a = torch.full(shape[:1], 0.1, device=device)
+        self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
+        self.Nsteps = Attribute(
+            torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
+        )
+        self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+        self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
         for param in self.parameters():
             param.requires_grad = False
 
@@ -271,10 +254,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     charges = state["charges"]
     coord = state["coord"]
     optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
-    if _compile_opt:
-        optimizer = torch.compile(optimizer)
-    else:
-        optimizer = torch.jit.script(optimizer)
+    optimizer = torch.jit.script(optimizer)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
@@ -363,10 +343,6 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         print(f"Optimization finished at step {istep}:   ", end="")
         # logging.info(f"Optimization finished at step {istep}:   ")
     print_stats(state, patience)
-
-
-if _compile_opt:
-    n_steps = torch.compile(n_steps)
 
 
 def ensemble_opt(
@@ -524,7 +500,7 @@ class optimizing(object):
             self.model, self.name, self.config["batchsize_atoms"]
         )  # Interestingly, EnForce_ANI inherits nn.module, bu can still accept a ScriptModule object as the input
 
-        with torch.jit.optimized_execution(not _compile_opt):
+        with torch.jit.optimized_execution(True):
             optdict = ensemble_opt(
                 net=model,
                 coord=coord_padded,
