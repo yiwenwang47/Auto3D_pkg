@@ -393,8 +393,8 @@ def ensemble_opt(
     ) as prof:
         n_steps(
             state=state,
-            n=param["opt_steps"],
-            # n=10,
+            # n=param["opt_steps"],
+            n=1,
             opttol=param["opttol"],
             patience=param["patience"],
         )
