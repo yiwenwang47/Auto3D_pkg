@@ -401,6 +401,7 @@ def ensemble_opt(
     total_flops = sum(
         entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
     )
+    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=100))
     print(f"Total FLOPs: {total_flops}", flush=True)
 
     return dict(
