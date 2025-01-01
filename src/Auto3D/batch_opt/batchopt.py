@@ -338,8 +338,8 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
             not_converged
         ] = oscillating_count  # update counts for continuous no reduction in fmax
 
-        if (istep % (n // 10)) == 0:
-            print_stats(state, patience)
+        # if (istep % (n // 10)) == 0:
+        #     print_stats(state, patience)
     if istep == (n):
         print("Reaching maximum optimization step:   ", end="")
         # logging.info("Reaching maximum optimization step:   ")
