@@ -391,13 +391,13 @@ def ensemble_opt(
     with profile(
         activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_flops=True
     ) as prof:
-        with record_function("model_inference"):
-            n_steps(
-                state=state,
-                n=param["opt_steps"],
-                opttol=param["opttol"],
-                patience=param["patience"],
-            )
+        n_steps(
+            state=state,
+            # n=param["opt_steps"],
+            n=10,
+            opttol=param["opttol"],
+            patience=param["patience"],
+        )
     total_flops = sum(
         entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
     )
