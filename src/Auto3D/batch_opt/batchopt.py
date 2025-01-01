@@ -283,23 +283,11 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         smallest_fmax = smallest_fmax0[not_converged]
         oscillating_count = state["oscillating_count"][not_converged]
 
-        with profile(
-            activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_flops=True
-        ) as prof:
-            with record_function("model_inference"):
-
-                coord.requires_grad_(True)
-                e, f = state["nn"].forward_batched(
-                    coord, numbers, charges
-                )  # Key step to calculate all energies and forces.
-                coord.requires_grad_(False)
-
-        total_flops = sum(
-            entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
-        )
-        print(f"Total FLOPs: {total_flops}", flush=True)
-        # logging.info(f"Total FLOPs: {total_flops}")
-        break
+        coord.requires_grad_(True)
+        e, f = state["nn"].forward_batched(
+            coord, numbers, charges
+        )  # Key step to calculate all energies and forces.
+        coord.requires_grad_(False)
 
         with torch.no_grad():
             coord = optimizer(coord, f)
@@ -400,13 +388,20 @@ def ensemble_opt(
         energy=energy,
         # timing=defaultdict(float),
     )
-
-    n_steps(
-        state=state,
-        n=param["opt_steps"],
-        opttol=param["opttol"],
-        patience=param["patience"],
+    with profile(
+        activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], with_flops=True
+    ) as prof:
+        with record_function("model_inference"):
+            n_steps(
+                state=state,
+                n=param["opt_steps"],
+                opttol=param["opttol"],
+                patience=param["patience"],
+            )
+    total_flops = sum(
+        entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
     )
+    print(f"Total FLOPs: {total_flops}", flush=True)
 
     return dict(
         coord=state["coord"].tolist(),
