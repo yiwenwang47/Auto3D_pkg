@@ -270,7 +270,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     assert len(charges.shape) == 1
     assert len(smallest_fmax0.shape) == 2
     assert len(oscillating_count0.shape) == 2
-    for istep in tqdm(range(1, (1 + 1), 1)):
+    for istep in tqdm(range(1, (n + 1), 1)):
         not_converged = ~state["converged_mask"]  # Essential tracker handle, size fixed
         # stop optimization if all structures converged.
         if not not_converged.any():
@@ -297,7 +297,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
             entry.flops for entry in prof.key_averages() if hasattr(entry, "flops")
         )
         print(f"Total FLOPs: {total_flops}", flush=True)
-        sys.exit(0)
+        break
 
         with torch.no_grad():
             coord = optimizer(coord, f)
