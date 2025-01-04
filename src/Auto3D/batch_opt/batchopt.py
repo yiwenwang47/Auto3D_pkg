@@ -52,8 +52,12 @@ class FIRE(nn.Module):
         self.Nsteps = Attribute(
             torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
         )
-        self.dt = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
-        self.a = Attribute(torch.full(shape[:1], 0.1, device=device), torch.Tensor)
+        self.dt = Attribute(
+            torch.full((*shape[:1], 1, 1), 0.1, device=device), torch.Tensor
+        )
+        self.a = Attribute(
+            torch.full((*shape[:1], 1, 1), 0.1, device=device), torch.Tensor
+        )
         for param in self.parameters():
             param.requires_grad = False
 
@@ -70,7 +74,7 @@ class FIRE(nn.Module):
         vf = (forces * self.v).flatten(-2, -1).sum(-1)
         w_vf = vf > 0.0
         if w_vf.all():
-            a = self.a.unsqueeze(-1).unsqueeze(-1)
+            a = self.a
             v = self.v
             f = forces
             self.v = (1.0 - a) * v + a * v.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(
@@ -80,9 +84,8 @@ class FIRE(nn.Module):
             ).unsqueeze(
                 -1
             )
-            # self.Nsteps += 1
         elif w_vf.any():
-            a = self.a[w_vf].unsqueeze(-1).unsqueeze(-1)
+            a = self.a[w_vf]
             v = self.v[w_vf]
             f = forces[w_vf]
             self.v[w_vf] = (1.0 - a) * v + a * v.flatten(-2, -1).norm(
@@ -118,7 +121,7 @@ class FIRE(nn.Module):
             self.dt[w_vf] *= self.fdec
             self.Nsteps[w_vf] = torch.tensor(0, device=self.Nsteps.device)
 
-        dt = self.dt.unsqueeze(-1).unsqueeze(-1)
+        dt = self.dt
         self.v += dt * forces
         dr = dt * self.v
         normdr = dr.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
