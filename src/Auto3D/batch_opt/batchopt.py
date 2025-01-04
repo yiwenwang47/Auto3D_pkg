@@ -89,7 +89,8 @@ class FIRE(nn.Module):
         Return:
             new coordinates that are moved based on input forces. Size (Batch, N, 3)"""
         vf = (forces * self.v).flatten(-2, -1).sum(-1)
-        idx_positive = (vf > 0.0).nonzero(as_tuple=True)
+        w_vf = vf > 0.0
+        idx_positive = w_vf.nonzero(as_tuple=True)
         self.v[idx_positive] = self.update_v(
             a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
         )
@@ -257,7 +258,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
     charges = state["charges"]
     coord = state["coord"]
     optimizer = FIRE(shape=tuple(coord.shape), device=coord.device)
-    optimizer = torch.jit.script(optimizer)
+    # optimizer = torch.jit.script(optimizer)
     # the following two terms are used to detect oscillating conformers
     smallest_fmax0 = torch.tensor(np.ones((len(coord), 1)) * 999, dtype=torch.float).to(
         coord.device
@@ -503,7 +504,7 @@ class optimizing(object):
             self.model, self.name, self.config["batchsize_atoms"]
         )  # Interestingly, EnForce_ANI inherits nn.module, bu can still accept a ScriptModule object as the input
 
-        with torch.jit.optimized_execution(True):
+        with torch.jit.optimized_execution(False):
             optdict = ensemble_opt(
                 net=model,
                 coord=coord_padded,
