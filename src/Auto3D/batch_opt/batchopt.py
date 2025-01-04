@@ -90,14 +90,14 @@ class FIRE(nn.Module):
             new coordinates that are moved based on input forces. Size (Batch, N, 3)"""
         vf = (forces * self.v).flatten(-2, -1).sum(-1)
         w_vf = vf > 0.0
-        idx_positive = w_vf.nonzero(as_tuple=True)
-        self.v[idx_positive] = self.update_v(
-            a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
-        )
-        # if w_vf.all():
-        #     self.v = self.update_v(a=self.a, v=self.v, f=forces)
-        # elif w_vf.any():
-        #     self.v[w_vf] = self.update_v(a=self.a[w_vf], v=self.v[w_vf], f=forces[w_vf])
+        # idx_positive = w_vf.nonzero(as_tuple=True)
+        # self.v[idx_positive] = self.update_v(
+        #     a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
+        # )
+        if w_vf.all():
+            self.v = self.update_v(a=self.a, v=self.v, f=forces)
+        elif w_vf.any():
+            self.v[w_vf] = self.update_v(a=self.a[w_vf], v=self.v[w_vf], f=forces[w_vf])
 
         # Update alpha (a) and delta_t (dt) accordingly
         w_N = self.Nsteps > self.Nmin
