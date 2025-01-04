@@ -61,6 +61,23 @@ class FIRE(nn.Module):
         for param in self.parameters():
             param.requires_grad = False
 
+    @staticmethod
+    def update_v(a: torch.Tensor, v: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
+        """Update velocity based on input alpha, velocity and force.
+
+        Arguments:
+            a: alpha. Size (Batch, 1, 1)
+            v: velocity. Size (Batch, N, 3)
+            f: force. Size (Batch, N, 3)
+
+        Return:
+            new velocity. Size (Batch, N, 3)"""
+
+        v_norm = v.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
+        f_norm = f.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
+        new_v = (1.0 - a) * v + a * v_norm * f / f_norm
+        return new_v
+
     def forward(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
         """Moving atoms based on forces
 
@@ -74,29 +91,9 @@ class FIRE(nn.Module):
         vf = (forces * self.v).flatten(-2, -1).sum(-1)
         w_vf = vf > 0.0
         if w_vf.all():
-            a = self.a
-            v = self.v
-            f = forces
-            self.v = (1.0 - a) * v + a * v.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(
-                -1
-            ).unsqueeze(-1) * f / f.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(
-                -1
-            ).unsqueeze(
-                -1
-            )
+            self.v = self.update_v(a=self.a, v=self.v, f=forces)
         elif w_vf.any():
-            a = self.a[w_vf]
-            v = self.v[w_vf]
-            f = forces[w_vf]
-            self.v[w_vf] = (1.0 - a) * v + a * v.flatten(-2, -1).norm(
-                p=2, dim=-1
-            ).unsqueeze(-1).unsqueeze(-1) * f / f.flatten(-2, -1).norm(
-                p=2, dim=-1
-            ).unsqueeze(
-                -1
-            ).unsqueeze(
-                -1
-            )
+            self.v[w_vf] = self.update_v(a=self.a[w_vf], v=self.v[w_vf], f=forces[w_vf])
 
         # Update alpha (a) and delta_t (dt) accordingly
         w_N = self.Nsteps > self.Nmin
