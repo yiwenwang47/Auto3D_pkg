@@ -108,15 +108,15 @@ class FIRE(nn.Module):
 
         w_vf = ~w_vf
         if w_vf.all():
-            self.v[:] = 0.0
+            self.v[:] = torch.tensor(0.0, device=self.v.device)
             self.a[:] = torch.tensor(self.astart, device=self.a.device)
             self.dt[:] *= self.fdec
-            self.Nsteps[:] = 0
+            self.Nsteps[:] = torch.tensor(0, device=self.Nsteps.device)
         elif w_vf.any():
             self.v[w_vf] = torch.tensor(0.0, device=self.v.device)
             self.a[w_vf] = torch.tensor(self.astart, device=self.a.device)
             self.dt[w_vf] *= self.fdec
-            self.Nsteps[w_vf] = torch.tensor(0, device=self.v.device)
+            self.Nsteps[w_vf] = torch.tensor(0, device=self.Nsteps.device)
 
         dt = self.dt.unsqueeze(-1).unsqueeze(-1)
         self.v += dt * forces
