@@ -94,10 +94,6 @@ class FIRE(nn.Module):
         self.v[idx_positive] = self.update_v(
             a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
         )
-        # if w_vf.all():
-        #     self.v = self.update_v(a=self.a, v=self.v, f=forces)
-        # elif w_vf.any():
-        #     self.v[w_vf] = self.update_v(a=self.a[w_vf], v=self.v[w_vf], f=forces[w_vf])
 
         # Update alpha (a) and delta_t (dt) accordingly
         w_N = self.Nsteps > self.Nmin
@@ -108,19 +104,13 @@ class FIRE(nn.Module):
         self.a[w_vfN] *= self.fa  # Algorithm 2, line 14
 
         # Update Nsteps
-        self.Nsteps[w_vf] += 1  # Algorithm 2, line 10
+        self.Nsteps[idx_positive] += 1  # Algorithm 2, line 10
 
-        w_vf = ~w_vf
-        if w_vf.all():
-            self.v[:] = torch.tensor(0.0, device=self.v.device)
-            self.a[:] = torch.tensor(self.astart, device=self.a.device)
-            self.dt[:] *= self.fdec
-            self.Nsteps[:] = torch.tensor(0, device=self.Nsteps.device)
-        elif w_vf.any():
-            self.v[w_vf] = torch.tensor(0.0, device=self.v.device)
-            self.a[w_vf] = torch.tensor(self.astart, device=self.a.device)
-            self.dt[w_vf] *= self.fdec
-            self.Nsteps[w_vf] = torch.tensor(0, device=self.Nsteps.device)
+        idx_non_positive = (~w_vf).nonzero()
+        self.v[idx_non_positive] = torch.tensor(0.0, device=self.v.device)
+        self.a[idx_non_positive] = torch.tensor(self.astart, device=self.a.device)
+        self.dt[idx_non_positive] *= self.fdec
+        self.Nsteps[idx_non_positive] = torch.tensor(0, device=self.Nsteps.device)
 
         dt = self.dt
         self.v += dt * forces
