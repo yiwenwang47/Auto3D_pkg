@@ -88,6 +88,8 @@ class FIRE(nn.Module):
 
         Return:
             new coordinates that are moved based on input forces. Size (Batch, N, 3)"""
+
+        # Update velocities
         vf = (forces * self.v).flatten(-2, -1).sum(-1)
         w_vf = vf > 0.0
         idx_positive = w_vf.nonzero()
@@ -95,28 +97,29 @@ class FIRE(nn.Module):
             a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
         )
 
-        # Update alpha (a) and delta_t (dt) accordingly
-        w_N = self.Nsteps > self.Nmin
-        w_vfN = w_vf & w_N
-        self.dt[w_vfN] = (self.dt[w_vfN] * self.finc).clamp(
+        # Update alpha (a) and delta_t (dt) tensors accordingly
+        idx = (w_vf & (self.Nsteps > self.Nmin)).nonzero()
+        self.dt[idx] = (self.dt[idx] * self.finc).clamp(
             max=self.dt_max
         )  # Algorithm 2, line 13
-        self.a[w_vfN] *= self.fa  # Algorithm 2, line 14
+        self.a[idx] *= self.fa  # Algorithm 2, line 14
 
         # Update Nsteps
         self.Nsteps[idx_positive] += 1  # Algorithm 2, line 10
 
+        # Identify non-positive v*f positions
         idx_non_positive = (~w_vf).nonzero()
         self.v[idx_non_positive] = torch.tensor(0.0, device=self.v.device)
         self.a[idx_non_positive] = torch.tensor(self.astart, device=self.a.device)
         self.dt[idx_non_positive] *= self.fdec
         self.Nsteps[idx_non_positive] = torch.tensor(0, device=self.Nsteps.device)
 
+        # Final integration step
         dt = self.dt
-        self.v += dt * forces
+        self.v.add_(dt * forces)
         dr = dt * self.v
         normdr = dr.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
-        dr *= (self.maxstep / normdr).clamp(max=1.0)
+        dr.mul_((self.maxstep / normdr).clamp(max=1.0))
         return coord + dr
 
     @torch.jit.export
