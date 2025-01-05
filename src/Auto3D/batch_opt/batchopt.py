@@ -108,11 +108,11 @@ class FIRE(nn.Module):
         self.Nsteps[idx_positive] += 1  # Algorithm 2, line 10
 
         # Identify non-positive v*f positions
-        idx_non_positive = (~w_vf).nonzero()
-        self.v[idx_non_positive] = torch.tensor(0.0, device=self.v.device)
-        self.a[idx_non_positive] = torch.tensor(self.astart, device=self.a.device)
+        idx_non_positive = (~w_vf).nonzero().flatten()
+        self.v.index_fill_(0, idx_non_positive, 0.0)
+        self.a.index_fill_(0, idx_non_positive, self.astart)
         self.dt[idx_non_positive] *= self.fdec
-        self.Nsteps[idx_non_positive] = torch.tensor(0, device=self.Nsteps.device)
+        self.Nsteps.index_fill_(0, idx_non_positive, 0)
 
         # Final integration step
         dt = self.dt
