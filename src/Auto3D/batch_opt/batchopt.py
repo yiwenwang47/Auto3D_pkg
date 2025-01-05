@@ -107,13 +107,6 @@ class FIRE(nn.Module):
         )  # Algorithm 2, line 10
 
         # Update alpha (a) and delta_t (dt) tensors accordingly
-        # idx = (positive_mask & (self.Nsteps > self.Nmin)).nonzero()
-        # self.dt[idx] = (self.dt[idx] * self.finc).clamp(
-        #     max=self.dt_max
-        # )  # Algorithm 2, line 13
-        # self.a[idx] *= self.fa  # Algorithm 2, line 14
-
-        # Update alpha (a) and delta_t (dt) tensors accordingly
         update_mask = (
             (positive_mask & (self.Nsteps > self.Nmin)).unsqueeze(-1).unsqueeze(-1)
         )
