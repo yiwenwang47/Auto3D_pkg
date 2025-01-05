@@ -63,7 +63,8 @@ class FIRE(nn.Module):
 
     @staticmethod
     def update_v(a: torch.Tensor, v: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
-        """Update velocity based on input alpha, velocity and force.
+        r"""
+        Update velocity based on input alpha, velocity and force.
 
         Arguments:
             a: alpha. Size (Batch, 1, 1)
@@ -71,7 +72,8 @@ class FIRE(nn.Module):
             f: force. Size (Batch, N, 3)
 
         Return:
-            new velocity. Size (Batch, N, 3)"""
+            new velocity. Size (Batch, N, 3)
+        """
 
         v_norm = v.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
         f_norm = f.flatten(-2, -1).norm(p=2, dim=-1).unsqueeze(-1).unsqueeze(-1)
@@ -79,7 +81,8 @@ class FIRE(nn.Module):
         return new_v
 
     def forward(self, coord: torch.Tensor, forces: torch.Tensor) -> torch.Tensor:
-        """Moving atoms based on forces
+        r"""
+        Moving atoms based on forces
 
         Arguments:
             coord: coordinates of atoms. Size (Batch, N, 3), where Batch is
@@ -87,15 +90,9 @@ class FIRE(nn.Module):
             forces: forces on each atom. Size (Batch, N, 3).
 
         Return:
-            new coordinates that are moved based on input forces. Size (Batch, N, 3)"""
+            new coordinates that are moved based on input forces. Size (Batch, N, 3)
+        """
 
-        # Update velocities
-        # vf = (forces * self.v).flatten(-2, -1).sum(-1)
-        # w_vf = vf > 0.0
-        # idx_positive = w_vf.nonzero()
-        # self.v[idx_positive] = self.update_v(
-        #     a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
-        # )
         # Compute boolean mask
         positive_mask = (forces * self.v).flatten(-2, -1).sum(-1) > 0.0
         # Update velocities using masks
@@ -110,11 +107,22 @@ class FIRE(nn.Module):
         )  # Algorithm 2, line 10
 
         # Update alpha (a) and delta_t (dt) tensors accordingly
-        idx = (positive_mask & (self.Nsteps > self.Nmin)).nonzero()
-        self.dt[idx] = (self.dt[idx] * self.finc).clamp(
-            max=self.dt_max
+        # idx = (positive_mask & (self.Nsteps > self.Nmin)).nonzero()
+        # self.dt[idx] = (self.dt[idx] * self.finc).clamp(
+        #     max=self.dt_max
+        # )  # Algorithm 2, line 13
+        # self.a[idx] *= self.fa  # Algorithm 2, line 14
+
+        # Update alpha (a) and delta_t (dt) tensors accordingly
+        update_mask = (
+            (positive_mask & (self.Nsteps > self.Nmin)).unsqueeze(-1).unsqueeze(-1)
+        )
+        self.dt = torch.where(
+            update_mask, (self.dt * self.finc).clamp(max=self.dt_max), self.dt
         )  # Algorithm 2, line 13
-        self.a[idx] *= self.fa  # Algorithm 2, line 14
+        self.a = torch.where(
+            update_mask, self.a * self.fa, self.a
+        )  # Algorithm 2, line 14
 
         # Identify non-positive v*f positions
         non_positive_mask = (~positive_mask).unsqueeze(-1).unsqueeze(-1)
