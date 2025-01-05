@@ -248,7 +248,9 @@ def print_stats(state, patience):
     #       (num_total, num_converged, num_dropped, num_active))
 
 
-def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
+def n_steps(
+    net: EnForce_ANI, state: dict[torch.Tensor], n: int, opttol: float, patience: int
+):
     """Doing n steps optimization for each input. Only converged structures are
     modified at each step. n_steps does not change input conformer order.
 
@@ -288,7 +290,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
         oscillating_count = state["oscillating_count"][not_converged]
 
         coord.requires_grad_(True)
-        e, f = state["nn"].forward_batched(
+        e, f = net.forward_batched(
             coord, numbers, charges
         )  # Key step to calculate all energies and forces.
         coord.requires_grad_(False)
@@ -353,7 +355,7 @@ def n_steps(state: dict[torch.Tensor], n: int, opttol: float, patience: int):
 
 
 def ensemble_opt(
-    net,
+    net: EnForce_ANI,
     coord: List[List[float]],
     numbers: List[int],
     charges: List[int],
@@ -369,7 +371,6 @@ def ensemble_opt(
     numbers: atomic numbers in the molecule (include H). (N, m)
     charges: (N,)
     param: a dictionary containing parameters
-    model: "AIMNET", "ANI2xt", "ANI2x" or "userNNP"
     device
     """
     coord = torch.tensor(coord, dtype=torch.float, device=device)
@@ -386,13 +387,12 @@ def ensemble_opt(
         numbers=numbers,
         charges=charges,
         converged_mask=converged_mask,
-        nn=net,
         fmax=fmax,
         energy=energy,
-        # timing=defaultdict(float),
     )
 
     n_steps(
+        net=net,
         state=state,
         n=param["opt_steps"],
         opttol=param["opttol"],
@@ -403,7 +403,6 @@ def ensemble_opt(
         coord=state["coord"].tolist(),
         energy=state["energy"].tolist(),
         fmax=state["fmax"].tolist(),
-        # timing=dict(state["timing"]),
     )
 
 
