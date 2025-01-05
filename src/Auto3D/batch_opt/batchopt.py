@@ -48,18 +48,18 @@ class FIRE(nn.Module):
         self.fdec = 0.7
         self.astart = 0.1
         self.fa = 0.99
-        self.v = Attribute(torch.zeros(*shape, device=device), torch.Tensor)
-        self.Nsteps = Attribute(
+        self.v: torch.Tensor = Attribute(
+            torch.zeros(*shape, device=device), torch.Tensor
+        )
+        self.Nsteps: torch.Tensor = Attribute(
             torch.zeros(shape[0], dtype=torch.long, device=device), torch.Tensor
         )
-        self.dt = Attribute(
+        self.dt: torch.Tensor = Attribute(
             torch.full((*shape[:1], 1, 1), 0.1, device=device), torch.Tensor
         )
-        self.a = Attribute(
+        self.a: torch.Tensor = Attribute(
             torch.full((*shape[:1], 1, 1), 0.1, device=device), torch.Tensor
         )
-        for param in self.parameters():
-            param.requires_grad = False
 
     @staticmethod
     def update_v(a: torch.Tensor, v: torch.Tensor, f: torch.Tensor) -> torch.Tensor:
@@ -90,11 +90,20 @@ class FIRE(nn.Module):
             new coordinates that are moved based on input forces. Size (Batch, N, 3)"""
 
         # Update velocities
-        vf = (forces * self.v).flatten(-2, -1).sum(-1)
-        w_vf = vf > 0.0
+        # vf = (forces * self.v).flatten(-2, -1).sum(-1)
+        # w_vf = vf > 0.0
+        # idx_positive = w_vf.nonzero()
+        # self.v[idx_positive] = self.update_v(
+        #     a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
+        # )
+        # Compute boolean mask
+        w_vf = (forces * self.v).flatten(-2, -1).sum(-1) > 0.0
         idx_positive = w_vf.nonzero()
-        self.v[idx_positive] = self.update_v(
-            a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
+        # Update velocities using masks
+        self.v = torch.where(
+            w_vf.unsqueeze(-1).unsqueeze(-1),
+            self.update_v(self.a, self.v, forces),
+            self.v,
         )
 
         # Update alpha (a) and delta_t (dt) tensors accordingly
