@@ -97,31 +97,31 @@ class FIRE(nn.Module):
         #     a=self.a[idx_positive], v=self.v[idx_positive], f=forces[idx_positive]
         # )
         # Compute boolean mask
-        w_vf = (forces * self.v).flatten(-2, -1).sum(-1) > 0.0
-        idx_positive = w_vf.nonzero()
+        positive_mask = (forces * self.v).flatten(-2, -1).sum(-1) > 0.0
         # Update velocities using masks
         self.v = torch.where(
-            w_vf.unsqueeze(-1).unsqueeze(-1),
+            positive_mask.unsqueeze(-1).unsqueeze(-1),
             self.update_v(self.a, self.v, forces),
-            self.v,
+            torch.zeros_like(self.v),
         )
+        # Update Nsteps
+        self.Nsteps = torch.where(
+            positive_mask, self.Nsteps + 1, torch.zeros_like(self.Nsteps)
+        )  # Algorithm 2, line 10
 
         # Update alpha (a) and delta_t (dt) tensors accordingly
-        idx = (w_vf & (self.Nsteps > self.Nmin)).nonzero()
+        idx = (positive_mask & (self.Nsteps > self.Nmin)).nonzero()
         self.dt[idx] = (self.dt[idx] * self.finc).clamp(
             max=self.dt_max
         )  # Algorithm 2, line 13
         self.a[idx] *= self.fa  # Algorithm 2, line 14
 
-        # Update Nsteps
-        self.Nsteps[idx_positive] += 1  # Algorithm 2, line 10
-
         # Identify non-positive v*f positions
-        idx_non_positive = (~w_vf).nonzero().flatten()
-        self.v.index_fill_(0, idx_non_positive, 0.0)
-        self.a.index_fill_(0, idx_non_positive, self.astart)
-        self.dt[idx_non_positive] *= self.fdec
-        self.Nsteps.index_fill_(0, idx_non_positive, 0)
+        non_positive_mask = (~positive_mask).unsqueeze(-1).unsqueeze(-1)
+        self.a = torch.where(
+            non_positive_mask, torch.full_like(self.a, self.astart), self.a
+        )
+        self.dt = torch.where(non_positive_mask, self.dt * self.fdec, self.dt)
 
         # Final integration step
         dt = self.dt
