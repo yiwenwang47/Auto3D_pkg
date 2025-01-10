@@ -53,7 +53,7 @@ def report(path: str):
     num_charged_mols = 0
     unspecified_atom_centers = []
     num_unspecified_mols = 0
-    for mol in suppl:
+    for mol in filter(None, suppl):
         c += 1
         atoms = [a.GetAtomicNum() for a in mol.GetAtoms()]  # H not included
         elements = list(set(atoms))
@@ -163,7 +163,7 @@ def split_smi(smi):
 def countSDF(sdf):
     """Counting the number of structures in SDF file"""
     mols = Chem.SDMolSupplier(sdf)
-    mols2 = [mol for mol in mols]
+    mols2 = [mol for mol in filter(None, mols)]
     c = len(mols2)
     return c
 
@@ -256,7 +256,7 @@ def find_smiles_not_in_sdf(smi, sdf):
 
     sdf_data = []
     mols = Chem.SDMolSupplier(sdf)
-    for mol in mols:
+    for mol in filter(None, mols):
         sdf_data.append(mol.GetProp("_Name"))
     sdf_data = list(set(sdf_data))
 

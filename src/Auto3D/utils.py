@@ -218,7 +218,7 @@ def check_sdf_format(config):
 
     supp = Chem.SDMolSupplier(config.input_file, removeHs=False)
     mols, only_aimnet_ids = [], []
-    for mol in supp:
+    for mol in filter(None, supp):
         id = mol.GetProp("_Name")
         assert len(id) > 0, "Empty ID"
         # assert "_" not in id, \
@@ -383,7 +383,8 @@ def enantiomer_helper(smiles):
     """get non-enantiomer SMILES from given list of smiles"""
     mols = [Chem.MolFromSmiles(smi) for smi in smiles]
     stereo_centers = [
-        Chem.FindMolChiralCenters(mol, useLegacyImplementation=False) for mol in mols
+        Chem.FindMolChiralCenters(mol, useLegacyImplementation=False)
+        for mol in filter(None, mols)
     ]
     non_enantiomers = []
     non_centers = []
@@ -477,7 +478,7 @@ def filter_unique(
 
     # Remove similar structures
     unique_mols = []
-    for mol_i in mols:
+    for mol_i in filter(None, mols):
         unique = True
         for mol_j in unique_mols:
             try:
@@ -690,9 +691,9 @@ def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.
             ids.append(id)
     elif format == "sdf":
         supp = Chem.SDMolSupplier(source, removeHs=False)
-        for mol in supp:
-            id = mol.GetProp("_Name")
-            ids.append(id)
+        for mol in filter(None, supp):
+            ids.append(mol.GetProp("_Name"))
+
     else:
         print("Unsupported file format: %s" % format)
         return
@@ -700,7 +701,7 @@ def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.
     # convert sdf to a Dict[id, List[mols]]
     id_mols = defaultdict(lambda: [])
     supp = Chem.SDMolSupplier(sdf, removeHs=False)
-    for mol in supp:
+    for mol in filter(None, supp):
         id = mol.GetProp("_Name")
         if "@taut" in id:
             id = id.split("@taut")[0]
@@ -715,7 +716,7 @@ def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.
             mols = id_mols[id]
             if len(mols) >= 1:
                 ordered_mols.extend(mols)
-                for mol in mols:
+                for mol in filter(None, mols):
                     f.write(mol)
     os.remove(source)
     return ordered_mols
