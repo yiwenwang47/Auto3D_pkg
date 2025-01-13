@@ -19,7 +19,6 @@ class ranking(object):
 
     Arguments:
         input_path: An SDF file that contains all isomers.
-        energies: A txt file that contains the IDs and energies.
         out_path: An SDF file that stores the optimical structures.
         k: Outputs the top-k structures for each SMILES.
         window: Outputs the structures whose energies are within
@@ -29,7 +28,7 @@ class ranking(object):
     """
 
     def __init__(
-        self, input_path, out_path, threshold, k=None, window=None, encoded=True
+        self, input_path, out_path, threshold, k=None, window=None, encoded=False
     ):
         r"""
         Args:
