@@ -334,8 +334,15 @@ def calc_thermo(
         species = [a.GetSymbol() for a in mol.GetAtoms()]
         charge = rdmolops.GetFormalCharge(mol)
         atoms = Atoms(species, coord)
+
         calculator.set_charge(charge)
         atoms.calc = calculator
+
+        if mol_info_func is None:
+            idx = mol.GetProp("_Name").strip()
+            T = 298
+        else:
+            idx, T = mol_info_func(mol)
 
         try:
             try:
