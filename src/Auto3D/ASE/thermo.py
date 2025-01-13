@@ -170,7 +170,7 @@ def vib_hessian(
     species = [a.GetSymbol() for a in mol.GetAtoms()]
     charge = rdmolops.GetFormalCharge(mol)
     atoms = Atoms(species, coord)
-    atoms.set_calculator(ase_calculator)
+    atoms.calc = ase_calculator
 
     # get the Hessian
     coord = torch.tensor(coord).to(device).unsqueeze(0)
@@ -198,7 +198,7 @@ def vib_ase(mol: Chem.Mol, ase_calculator):
     model: ANI2xt or AIMNet2 model with EnForce_ANI wrapper"""
     # get the ASE atoms object
     atoms = mol2atoms(mol)
-    atoms.set_calculator(ase_calculator)
+    atoms.calc = ase_calculator
 
     # get the VibrationsData object
     vib = Vibrations(atoms)
@@ -217,7 +217,7 @@ def do_mol_thermo(
 ):
     """For a RDKit mol object, calculate its thermochemistry properties.
     model: ANI2xt or AIMNet2 or ANI2x or userNNP that can be used to calculate Hessian"""
-    vib = vib_hessian(mol, atoms.get_calculator(), model, device, model_name=model_name)
+    vib = vib_hessian(mol, atoms.calc, model, device, model_name=model_name)
     vib_e = vib.get_energies()
     e = atoms.get_potential_energy()
     thermo = IdealGasThermo(
@@ -336,7 +336,7 @@ def calc_thermo(
         atoms = Atoms(species, coord)
 
         calculator.set_charge(charge)
-        atoms.set_calculator(calculator)
+        atoms.calc = calculator
 
         if mol_info_func is None:
             idx = mol.GetProp("_Name").strip()
@@ -344,23 +344,34 @@ def calc_thermo(
         else:
             idx, T = mol_info_func(mol)
 
+        EnForce_in = mol2aimnet_input(mol, device)
+        _, f_ = model(
+            EnForce_in["coord"].requires_grad_(True),
+            EnForce_in["numbers"],
+            EnForce_in["charge"],
+        )
+        fmax = f_.norm(dim=-1).max(dim=-1)[0].item()
+        assert fmax <= 0.01, "fmax too large"
+        mol = do_mol_thermo(mol, atoms, hessian_model, device, T, model_name=model_name)
+        out_mols.append(mol)
+
         try:
             try:
                 try:
-                    EnForce_in = mol2aimnet_input(mol, device, model_name=model_name)
+                    EnForce_in = mol2aimnet_input(mol, device)
                     _, f_ = model(
                         EnForce_in["coord"].requires_grad_(True),
                         EnForce_in["numbers"],
                         EnForce_in["charge"],
                     )
                     fmax = f_.norm(dim=-1).max(dim=-1)[0].item()
-                    assert fmax <= 0.01
+                    assert fmax <= 0.01, "fmax too large"
                     mol = do_mol_thermo(
                         mol, atoms, hessian_model, device, T, model_name=model_name
                     )
                     out_mols.append(mol)
                 except AssertionError:
-                    print("optiimize the input geometry")
+                    print("Optimize the input geometry", flush=True)
                     opt = BFGS(atoms)
                     opt.run(fmax=3e-3, steps=opt_steps)
                     mol = do_mol_thermo(
@@ -368,7 +379,10 @@ def calc_thermo(
                     )
                     out_mols.append(mol)
             except ValueError:
-                print("use tighter convergence threshold for geometry optimization")
+                print(
+                    "Tighter convergence threshold for geometry optimization",
+                    flush=True,
+                )
                 opt = BFGS(atoms)
                 opt.run(fmax=opt_tol, steps=opt_steps)
                 mol = do_mol_thermo(

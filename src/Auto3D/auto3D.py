@@ -697,7 +697,7 @@ def optimize_conformers(**kwargs):
         config=config,
         chunk_line=chunk_line,
         logging_queue=logging_queue,
-        do_ranking=False,
+        do_ranking=config.do_ranking,
     )
     for p2 in p2s:
         p2.join()
