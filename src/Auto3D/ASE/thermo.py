@@ -21,7 +21,7 @@ from ase.thermochemistry import IdealGasThermo
 from ase.vibrations import Vibrations, VibrationsData
 from rdkit import Chem
 from rdkit.Chem import rdmolops
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from Auto3D.batch_opt.ANI2xt_no_rep import ANI2xt
 from Auto3D.batch_opt.batchopt import EnForce_ANI
@@ -334,26 +334,8 @@ def calc_thermo(
         species = [a.GetSymbol() for a in mol.GetAtoms()]
         charge = rdmolops.GetFormalCharge(mol)
         atoms = Atoms(species, coord)
-
         calculator.set_charge(charge)
         atoms.calc = calculator
-
-        if mol_info_func is None:
-            idx = mol.GetProp("_Name").strip()
-            T = 298
-        else:
-            idx, T = mol_info_func(mol)
-
-        EnForce_in = mol2aimnet_input(mol, device)
-        _, f_ = model(
-            EnForce_in["coord"].requires_grad_(True),
-            EnForce_in["numbers"],
-            EnForce_in["charge"],
-        )
-        fmax = f_.norm(dim=-1).max(dim=-1)[0].item()
-        assert fmax <= 0.01, "fmax too large"
-        mol = do_mol_thermo(mol, atoms, hessian_model, device, T, model_name=model_name)
-        out_mols.append(mol)
 
         try:
             try:
