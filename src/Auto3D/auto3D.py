@@ -735,7 +735,7 @@ def optimize_conformers(**kwargs):
     return path_output
 
 
-def smiles2mols(smiles: List[str], **kwargs) -> List[Chem.Mol]:
+def smiles2mols(smiles: list[str], do_thermo: bool = False, **kwargs) -> List[Chem.Mol]:
     """
     A handy tool for finding the low-energy conformers for a list of SMILES.
     Compared with the ``generate_and_optimize_conformers`` function, it sacrifices efficiency for convenience.
@@ -745,15 +745,19 @@ def smiles2mols(smiles: List[str], **kwargs) -> List[Chem.Mol]:
     It's recommended only when the number of SMILES is less than 150;
     Otherwise using the generate_and_optimize_conformers function will be faster.
 
-    :param smiles: A list of SMILES strings for which to find low-energy conformers.
-    :type smiles: List[str]
-    :param args: A dictionary of arguments as returned by the ``option`` function.
-    :type args: dict
-    :return: A list of RDKit Mol objects representing the low-energy conformers of the input SMILES.
-    :rtype: List[Chem.Mol]
+    Args:
+        smiles (list[str]): A list of SMILES strings for low-energy conformers will be generated and optimized.
+        do_thermo (bool, optional): Whether to calculate Gibbs free energies. Defaults to False.
+        **kwargs: Configuration arguments for the Auto3D generate_and_optimize_conformers method.
+
+    Returns:
+        A list of RDKit Mol objects representing the low-energy conformers of the input SMILES.
     """
+
     config = create_config(**kwargs)
-    with tempfile.TemporaryDirectory() as tmpdirname:
+
+    tmpdirname = tempfile.mkdtemp()
+    try:
         basename = "smiles.smi"
         path0 = os.path.join(tmpdirname, basename)
         smiles2smi(smiles, path0)  # save all SMILES into a smi file
@@ -815,9 +819,18 @@ def smiles2mols(smiles: List[str], **kwargs) -> List[Chem.Mol]:
             threshold=config.threshold,
             k=k,
             window=window,
+            encoded=True,
         )
         rank_engine.run()
-        conformers = reorder_sdf(sdf=meta["output"], source=path0)
+        conformers = reorder_sdf(sdf=meta["output"], source=path0, clean_suffix=False)
+        if do_thermo:
+            from Auto3D.ASE.thermo import calc_thermo
 
-        print("Energy unit: Hartree if implicit.", flush=True)
+            output = calc_thermo(meta["output"], model_name="AIMNET")
+            supplier = Chem.SDMolSupplier(output, removeHs=False)
+            conformers = [mol for mol in supplier if mol is not None]
+
+    finally:
+        shutil.rmtree(tmpdirname)
+
     return conformers
