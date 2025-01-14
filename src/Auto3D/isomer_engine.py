@@ -8,9 +8,10 @@ import warnings
 from typing import Tuple
 
 from rdkit import Chem
-from rdkit.Chem import AllChem, rdMolDescriptors
+from rdkit.Chem import AllChem, Mol, rdMolDescriptors
 from rdkit.Chem.EnumerateStereoisomers import (
     EnumerateStereoisomers,
+    GetStereoisomerCount,
     StereoEnumerationOptions,
 )
 from rdkit.Chem.MolStandardize import rdMolStandardize
@@ -101,12 +102,50 @@ class tautomer_engine(object):
             raise ValueError(f'{self.mode} must be one of "oechem" or "rdkit".')
 
 
-def is_embedding_difficult(mol: Chem.Mol, numThreads: int) -> bool:
-    """Check if embedding is difficult for a molecule"""
-    cids = AllChem.EmbedMultipleConfs(
-        mol, numConfs=10, randomSeed=42, numThreads=numThreads, maxAttempts=10
+def mol_isomorphism(mol1: Mol, mol2: Mol) -> bool:
+    return any(mol1.GetSubstructMatches(mol2, useChirality=True)) and any(
+        mol2.GetSubstructMatches(mol1, useChirality=True)
     )
-    return len(cids) < 4
+
+
+def find_unique_mols(list_of_mols: list[Mol]) -> list[Mol]:
+    list_of_mols_copy = []
+    for mol in list_of_mols:
+        try:
+            Chem.SanitizeMol(mol)
+            list_of_mols_copy.append(mol)
+        except:
+            pass
+    new_list = []
+    for mol in list_of_mols_copy:
+        found = False
+        for new_mol in new_list:
+            if mol_isomorphism(mol, new_mol):
+                found = True
+                break
+        if not found:
+            new_list.append(mol)
+    return new_list
+
+
+def to_isomers(mol: Mol) -> list[Mol]:
+    r"""
+    Recursively enumerate all stereoisomers of a molecule. The official enumerator has trouble with some bicyclic molecules.
+
+    Args:
+        mol (Mol): A molecule.
+
+    Returns:
+        list[Mol]: A list of stereoisoemrs.
+    """
+    options = StereoEnumerationOptions(onlyUnassigned=True, unique=True)
+    isomers = []
+    for isomer in tuple(EnumerateStereoisomers(mol, options=options)):
+        if GetStereoisomerCount(isomer) == 1:
+            isomers.append(isomer)
+        else:
+            isomers += to_isomers(isomer)
+    return find_unique_mols(isomers)
 
 
 class rd_isomer(object):
@@ -161,7 +200,7 @@ class rd_isomer(object):
         return outputs
 
     @staticmethod
-    def enumerate_func(mol):
+    def enumerate_func(mol: Mol) -> list[str]:
         """Enumerate the R/S and cis/trans isomers
 
         Argument:
@@ -169,12 +208,11 @@ class rd_isomer(object):
 
         Return:
             isomers: a list of SMILES"""
-        opts = StereoEnumerationOptions(unique=True)
-        isomers = tuple(EnumerateStereoisomers(mol, options=opts))
-        isomers = sorted(
+        isomers = to_isomers(mol)
+        isomer_smiles = sorted(
             Chem.MolToSmiles(x, isomericSmiles=True, doRandom=False) for x in isomers
         )
-        return isomers
+        return isomer_smiles
 
     def write_enumerated_smi(self):
         with open(self.enumerated_smi_path, "w+") as f:
