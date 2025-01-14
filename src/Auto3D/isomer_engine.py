@@ -8,7 +8,7 @@ import warnings
 from typing import Tuple
 
 from rdkit import Chem
-from rdkit.Chem import AllChem, Mol, rdMolDescriptors
+from rdkit.Chem import AllChem, DataStructs, Mol, rdMolDescriptors
 from rdkit.Chem.EnumerateStereoisomers import (
     EnumerateStereoisomers,
     GetStereoisomerCount,
@@ -102,7 +102,24 @@ class tautomer_engine(object):
             raise ValueError(f'{self.mode} must be one of "oechem" or "rdkit".')
 
 
+_n_bits = 2048
+_radius = 5
+_fpgen = AllChem.GetMorganGenerator(
+    radius=_radius, fpSize=_n_bits, includeChirality=True
+)
+
+
 def mol_isomorphism(mol1: Mol, mol2: Mol) -> bool:
+    smi1 = Chem.CanonSmiles(Chem.MolToSmiles(mol1))
+    smi2 = Chem.CanonSmiles(Chem.MolToSmiles(mol2))
+    if smi1 == smi2:
+        return True
+
+    fp1 = _fpgen.GetFingerprint(mol1)
+    fp2 = _fpgen.GetFingerprint(mol2)
+    if DataStructs.FingerprintSimilarity(fp1, fp2) < 0.99:
+        return False
+
     return any(mol1.GetSubstructMatches(mol2, useChirality=True)) and any(
         mol2.GetSubstructMatches(mol1, useChirality=True)
     )
