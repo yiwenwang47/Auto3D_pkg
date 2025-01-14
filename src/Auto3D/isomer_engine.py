@@ -138,6 +138,7 @@ def to_isomers(mol: Mol) -> list[Mol]:
     Returns:
         list[Mol]: A list of stereoisoemrs.
     """
+    mol = Chem.AddHs(mol)
     options = StereoEnumerationOptions(onlyUnassigned=True, unique=True)
     isomers = []
     for isomer in tuple(EnumerateStereoisomers(mol, options=options)):
