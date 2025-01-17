@@ -25,7 +25,7 @@ from rdkit.Chem.rdMolDescriptors import (
 )
 from tqdm.auto import tqdm
 
-from Auto3D.utils_file import guess_file_type
+from Auto3D.utils_file import elegant_delete, guess_file_type
 
 # CODATA 2018 energy conversion factor
 hartree2ev = 27.211386245988
@@ -718,5 +718,5 @@ def reorder_sdf(sdf: str, source: str, clean_suffix: bool = False) -> List[Chem.
                 ordered_mols.extend(mols)
                 for mol in filter(None, mols):
                     f.write(mol)
-    os.remove(source)
+    elegant_delete(source)
     return ordered_mols

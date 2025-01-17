@@ -34,7 +34,13 @@ from Auto3D.isomer_engine import (
 )
 from Auto3D.ranking import ranking
 from Auto3D.utils import check_input, create_chunk_meta_names, housekeeping, reorder_sdf
-from Auto3D.utils_file import SDF2chunks, decode_ids, encode_ids, smiles2smi
+from Auto3D.utils_file import (
+    SDF2chunks,
+    decode_ids,
+    elegant_delete,
+    encode_ids,
+    smiles2smi,
+)
 
 try:
     mp.set_start_method("spawn")
@@ -68,12 +74,15 @@ def _clean_up_intermediate_files(directory, housekeeping_folder, output, verbose
     housekeeping_folder_gz = housekeeping_folder + ".tar.gz"
     with tarfile.open(housekeeping_folder_gz, "w:gz") as tar:
         tar.add(housekeeping_folder, arcname=os.path.basename(housekeeping_folder))
-    shutil.rmtree(housekeeping_folder)
+    try:
+        shutil.rmtree(housekeeping_folder)
+    except:
+        pass
     if not verbose:
         try:  # Clusters do not support send2trash
             send2trash(housekeeping_folder_gz)
         except:
-            os.remove(housekeeping_folder_gz)
+            elegant_delete(housekeeping_folder_gz)
 
 
 def isomer_wraper(chunk_info, config, queue, logging_queue):
@@ -531,7 +540,7 @@ def _clean_up(path_output, logger, logging_queue, job_name, output_file, verbose
     if not verbose:
         for file in glob.glob(f"{job_name}/*"):
             if file != path_output and not os.path.isdir(file):
-                os.remove(file)
+                elegant_delete(file)
         try:
             shutil.rmtree(job_name)
         except:

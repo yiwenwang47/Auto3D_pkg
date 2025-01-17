@@ -15,6 +15,13 @@ from rdkit.Chem.rdMolDescriptors import CalcNumUnspecifiedAtomStereoCenters
 from tqdm.auto import tqdm
 
 
+def elegant_delete(file: str):
+    try:
+        os.system(f"rm -f {file}")
+    except:
+        print(f"Couldn't remove the file: {file}.")
+
+
 def guess_file_type(filename):
     """Returns the extension for the filename"""
     assert "." in filename
@@ -368,5 +375,5 @@ def decode_ids(path: str, mapping: dict, suffix: str = "_out") -> str:
 
             w.write(mol)
     if new_path != path:
-        os.remove(path)  # remove the old file
+        elegant_delete(path)
     return new_path
