@@ -8,6 +8,8 @@ import warnings
 from typing import Tuple
 
 from rdkit import Chem
+
+Chem.SetUseLegacyStereoPerception(False)
 from rdkit.Chem import AllChem, DataStructs, Mol, rdMolDescriptors
 from rdkit.Chem.EnumerateStereoisomers import (
     EnumerateStereoisomers,
@@ -156,12 +158,7 @@ def to_isomers(mol: Mol) -> list[Mol]:
         list[Mol]: A list of stereoisoemrs.
     """
     options = StereoEnumerationOptions(onlyUnassigned=True, unique=True)
-    isomers = []
-    for isomer in tuple(EnumerateStereoisomers(mol, options=options)):
-        if GetStereoisomerCount(isomer) == 1:
-            isomers.append(isomer)
-        else:
-            isomers += to_isomers(isomer)
+    isomers = list(EnumerateStereoisomers(mol, options=options))
     return find_unique_mols(isomers)
 
 
