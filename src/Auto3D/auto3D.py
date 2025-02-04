@@ -605,7 +605,8 @@ def generate_and_optimize_conformers(**kwargs):
 
 def generate_conformers(**kwargs):
     r"""
-    Generate initial conformers from SMILES. Two steps: isomer generation and initial conformer embedding.
+    Generate initial conformers from SMILES strings.
+    Two steps: isomer generation and initial conformer embedding.
     """
 
     # Preprocessing work
@@ -661,7 +662,7 @@ def generate_conformers(**kwargs):
 
 def optimize_conformers(**kwargs):
     r"""
-    Optimize conformers generated in an sdf file.
+    Optimize conformers provided by an sdf file.
     """
 
     max_conformers_per_GB_memory = 8192
@@ -695,7 +696,7 @@ def optimize_conformers(**kwargs):
     # Save the initial .sdf files as divided above
     chunk_info = _save_chunks(config, logger, job_name, path0)
 
-    # This is not pretty, but a quick fix following the queueing logic by the original code for Auto3D
+    # This is not pretty, but a quick fix following the queueing logic used by the original Auto3D
     for i, path_dir in enumerate(chunk_info):
         path, directory = path_dir
         chunk_line.put((path, path, directory, i + 1))

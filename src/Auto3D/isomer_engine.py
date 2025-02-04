@@ -104,49 +104,6 @@ class tautomer_engine(object):
             raise ValueError(f'{self.mode} must be one of "oechem" or "rdkit".')
 
 
-_n_bits = 2048
-_radius = 5
-_fpgen = AllChem.GetMorganGenerator(
-    radius=_radius, fpSize=_n_bits, includeChirality=True
-)
-
-
-def mol_isomorphism(mol1: Mol, mol2: Mol) -> bool:
-    smi1 = Chem.CanonSmiles(Chem.MolToSmiles(mol1))
-    smi2 = Chem.CanonSmiles(Chem.MolToSmiles(mol2))
-    if smi1 == smi2:
-        return True
-
-    fp1 = _fpgen.GetFingerprint(mol1)
-    fp2 = _fpgen.GetFingerprint(mol2)
-    if DataStructs.FingerprintSimilarity(fp1, fp2) < 0.99:
-        return False
-
-    return any(mol1.GetSubstructMatches(mol2, useChirality=True)) and any(
-        mol2.GetSubstructMatches(mol1, useChirality=True)
-    )
-
-
-def find_unique_mols(list_of_mols: list[Mol]) -> list[Mol]:
-    list_of_mols_copy = []
-    for mol in list_of_mols:
-        try:
-            Chem.SanitizeMol(mol)
-            list_of_mols_copy.append(mol)
-        except:
-            pass
-    new_list = []
-    for mol in list_of_mols_copy:
-        found = False
-        for new_mol in new_list:
-            if mol_isomorphism(mol, new_mol):
-                found = True
-                break
-        if not found:
-            new_list.append(mol)
-    return new_list
-
-
 def to_isomers(mol: Mol) -> list[Mol]:
     r"""
     Recursively enumerate all stereoisomers of a molecule. The official enumerator has trouble with some bicyclic molecules.
@@ -159,7 +116,7 @@ def to_isomers(mol: Mol) -> list[Mol]:
     """
     options = StereoEnumerationOptions(onlyUnassigned=True, unique=True)
     isomers = list(EnumerateStereoisomers(mol, options=options))
-    return find_unique_mols(isomers)
+    return isomers
 
 
 class rd_isomer(object):
