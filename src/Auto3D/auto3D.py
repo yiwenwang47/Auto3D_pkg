@@ -25,13 +25,7 @@ from send2trash import send2trash
 
 import Auto3D
 from Auto3D.batch_opt.batchopt import optimizing
-from Auto3D.isomer_engine import (
-    generate_isomers_as_sdf,
-    handle_tautomers,
-    oe_isomer,
-    rd_isomer,
-    rd_isomer_sdf,
-)
+from Auto3D.isomer_engine import generate_isomers_as_sdf, handle_tautomers, rd_isomer
 from Auto3D.ranking import ranking
 from Auto3D.utils import check_input, create_chunk_meta_names, housekeeping, reorder_sdf
 from Auto3D.utils_file import (
@@ -674,6 +668,9 @@ def optimize_conformers(**kwargs):
         "capacity" not in kwargs
     ):  # default value of number of molecules to process per 1GB memory
         kwargs["capacity"] = max_conformers_per_GB_memory
+    # yet another workaround to avoid the exit message regarding k and window
+    if "do_ranking" in kwargs and not kwargs["do_ranking"]:
+        kwargs["k"] = 1
 
     config, job_name, path0, mapping, chunk_line, logger, logging_queue = _prep_work(
         **kwargs
