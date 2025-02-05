@@ -280,6 +280,7 @@ def calc_thermo(
     input_file: str,
     output_file: Optional[str] = None,
     mol_info_func: Optional[Callable] = None,
+    use_gpu: bool = True,
     gpu_idx: int = 0,
     opt_tol: float = 0.0002,
     opt_steps: int = 5000,
@@ -314,7 +315,7 @@ def calc_thermo(
         output_file = os.path.join(dir, basename)
     writer = Chem.SDWriter(output_file)
 
-    if torch.cuda.is_available():
+    if use_gpu and torch.cuda.is_available():
         device = torch.device(f"cuda:{gpu_idx}")
     else:
         device = torch.device("cpu")
