@@ -9,7 +9,7 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(root)
 import warnings
 from functools import partial
-from typing import Optional
+from typing import Callable, Optional
 
 import ase
 import ase.calculators.calculator
@@ -276,12 +276,13 @@ def aimnet_hessian_helper(
 
 
 def calc_thermo(
-    path: str,
     model_name: str,
-    mol_info_func=None,
-    gpu_idx=0,
-    opt_tol=0.0002,
-    opt_steps=5000,
+    input_file: str,
+    output_file: Optional[str] = None,
+    mol_info_func: Optional[Callable] = None,
+    gpu_idx: int = 0,
+    opt_tol: float = 0.0002,
+    opt_steps: int = 5000,
 ):
     """
     ASE interface for calculation thermo properties using ANI2x, ANI2xt or AIMNET.
@@ -302,13 +303,16 @@ def calc_thermo(
     :type opt_steps: int, optional
     """
     # Prepare output name
-    out_mols, mols_failed = [], []
-    dir = os.path.dirname(path)
-    if os.path.exists(model_name):
-        basename = os.path.basename(path).split(".")[0] + "_userNNP_G.sdf"
-    else:
-        basename = os.path.basename(path).split(".")[0] + f"_{model_name}_G.sdf"
-    outpath = os.path.join(dir, basename)
+    if output_file is None:
+        dir = os.path.dirname(input_file)
+        if os.path.exists(model_name):
+            basename = os.path.basename(input_file).split(".")[0] + "_userNNP_G.sdf"
+        else:
+            basename = (
+                os.path.basename(input_file).split(".")[0] + f"_{model_name}_G.sdf"
+            )
+        output_file = os.path.join(dir, basename)
+    writer = Chem.SDWriter(output_file)
 
     if torch.cuda.is_available():
         device = torch.device(f"cuda:{gpu_idx}")
@@ -328,8 +332,8 @@ def calc_thermo(
         hessian_model = torch.jit.load(model_name, map_location=device).double()
     model, calculator = model_name2model_calculator(model_name, device)
 
-    mols = list(Chem.SDMolSupplier(path, removeHs=False))
-    for mol in tqdm(mols):
+    out_mols, mols_failed = [], []
+    for mol in tqdm(Chem.SDMolSupplier(input_file, removeHs=False)):
         coord = mol.GetConformer().GetPositions()
         species = [a.GetSymbol() for a in mol.GetAtoms()]
         charge = rdmolops.GetFormalCharge(mol)
@@ -360,7 +364,7 @@ def calc_thermo(
                     )
                     out_mols.append(mol)
                 except AssertionError:
-                    print("Optimize the input geometry", flush=True)
+                    print("Optimizing the input geometry...", flush=True)
                     opt = BFGS(atoms)
                     opt.run(fmax=3e-3, steps=opt_steps)
                     mol = do_mol_thermo(
@@ -381,11 +385,10 @@ def calc_thermo(
         except:
             print("Failed: ", idx, flush=True)
             mols_failed.append(mol)
+        writer.write(mol)
+    writer.close()
 
     print("Number of failed thermo calculations: ", len(mols_failed), flush=True)
     print("Number of successful thermo calculations: ", len(out_mols), flush=True)
-    with Chem.SDWriter(outpath) as w:
-        all_mols = out_mols + mols_failed
-        for mol in all_mols:
-            w.write(mol)
-    return outpath
+
+    return output_file
