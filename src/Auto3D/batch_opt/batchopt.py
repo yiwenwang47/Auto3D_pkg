@@ -470,6 +470,13 @@ class optimizing(object):
             )
             self.coord_pad = 0
             self.species_pad = 0
+        elif name == "AIMNET-lite":
+            self.model = torch.jit.load(
+                os.path.join(root, "models/aimnet2_wb97m-d3_0.jpt"),
+                map_location=device,
+            )
+            self.coord_pad = 0
+            self.species_pad = 0
         elif name == "ANI2xt":
             self.model = ANI2xt(device)
             self.coord_pad = 0
