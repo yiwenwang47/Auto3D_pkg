@@ -173,7 +173,7 @@ class EnForce_ANI(nn.Module):
             energies
             forces
         """
-        if self.name == "AIMNET":
+        if self.name == "AIMNET" or self.name == "AIMNET-lite":
             d = self.ani(
                 dict(coord=coord, numbers=numbers, charge=charges)
             )  # Output from the model
