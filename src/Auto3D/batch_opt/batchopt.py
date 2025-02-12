@@ -173,12 +173,19 @@ class EnForce_ANI(nn.Module):
             energies
             forces
         """
-        if self.name == "AIMNET" or self.name == "AIMNET-lite":
+        if self.name == "AIMNET":
             d = self.ani(
                 dict(coord=coord, numbers=numbers, charge=charges)
             )  # Output from the model
             e = d["energy"].to(torch.double)
             f = d["forces"]
+        elif self.name == "AIMNET-lite":
+            d = self.ani(
+                dict(coord=coord, numbers=numbers, charge=charges)
+            )
+            g = torch.autograd.grad([d["energy"].sum()], [coord])[0]
+            f = -g
+            e = d["energy"].to(torch.double)
         elif self.name == "ANI2xt":
             e = self.ani(numbers, coord)
             g = torch.autograd.grad([e.sum()], [coord])[0]
