@@ -180,9 +180,7 @@ class EnForce_ANI(nn.Module):
             e = d["energy"].to(torch.double)
             f = d["forces"]
         elif self.name == "AIMNET-lite":
-            d = self.ani(
-                dict(coord=coord, numbers=numbers, charge=charges)
-            )
+            d = self.ani(dict(coord=coord, numbers=numbers, charge=charges))
             g = torch.autograd.grad([d["energy"].sum()], [coord])[0]
             f = -g
             e = d["energy"].to(torch.double)

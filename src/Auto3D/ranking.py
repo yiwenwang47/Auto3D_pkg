@@ -172,14 +172,17 @@ class ranking(object):
         data2 = Chem.SDMolSupplier(self.input_path, removeHs=False)
         mols, names, energies = [], [], []
         for mol in data2:
-            if (
-                (mol is not None)
-                and (mol.GetProp("Converged").lower() == "true")
-                and check_connectivity(mol)
-            ):  # Verify convergence and correct connectivity
-                mols.append(mol)
-                names.append(self.get_name(mol.GetProp("_Name")))
-                energies.append(float(mol.GetProp("E_tot")))
+            try:
+                if (
+                    (mol is not None)
+                    and (mol.GetProp("Converged").lower() == "true")
+                    and check_connectivity(mol)
+                ):  # Verify convergence and correct connectivity
+                    mols.append(mol)
+                    names.append(self.get_name(mol.GetProp("_Name")))
+                    energies.append(float(mol.GetProp("E_tot")))
+            except:
+                pass
 
         df = pd.DataFrame({"name": names, "energy": energies, "mol": mols})
 
