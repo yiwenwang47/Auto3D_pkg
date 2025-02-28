@@ -378,11 +378,13 @@ def _divide_jobs_based_on_memory(config):
             else:
                 gpu_idx = config.gpu_idx[0]
                 num_jobs = len(config.gpu_idx)
-            t = int(
-                math.ceil(
-                    torch.cuda.get_device_properties(gpu_idx).total_memory / (1024**3)
+            if torch.cuda.is_available():
+                t = int(
+                    math.ceil(
+                        torch.cuda.get_device_properties(gpu_idx).total_memory
+                        / (1024**3)
+                    )
                 )
-            )
         else:
             t = int(psutil.virtual_memory().total / (1024**3))
     chunk_size = t * smiles_per_G
@@ -488,7 +490,10 @@ def _create_and_run_opt_processes(config, chunk_line, logging_queue, do_ranking)
     p2s = []
     for idx in config.gpu_idx:
         if config.use_gpu:
-            device = torch.device(f"cuda:{idx}")
+            if torch.cuda.is_available():
+                device = torch.device(f"cuda:{idx}")
+            else:
+                raise ValueError("CUDA is not available.")
         else:
             device = torch.device("cpu")
         p2s.append(

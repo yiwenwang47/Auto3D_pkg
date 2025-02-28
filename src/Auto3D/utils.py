@@ -87,8 +87,8 @@ def check_input(config):
     # Check --use_gpu
     gpu_flag = config.use_gpu
     if gpu_flag:
-        if torch.cuda.is_available() == False:
-            sys.exit("No cuda device was detected. Please set --use_gpu=False.")
+        if torch.cuda.is_available() == False and torch.mps.is_available() == False:
+            sys.exit("No GPU was detected. Please set --use_gpu=False.")
     isomer_engine = config.isomer_engine
     if ("OE_LICENSE" not in os.environ) and (isomer_engine == "omega"):
         sys.exit(
