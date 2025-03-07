@@ -132,6 +132,12 @@ def model_name2model_calculator(model_name: str, device=torch.device("cpu"), cha
         )
         model = EnForce_ANI(aimnet, model_name)
         calculator = Calculator(model, charge)
+    elif model_name == "AIMNET-lite":
+        aimnet = torch.jit.load(
+            os.path.join(root, "models/aimnet2_wb97m-d3_0.jpt"), map_location=device
+        )
+        model = EnForce_ANI(aimnet, model_name)
+        calculator = Calculator(model, charge)
     elif model_name == "ANI2x":
         ani2x = torchani.models.ANI2x(periodic_table_index=True).to(device).double()
         model = EnForce_ANI(ani2x, model_name)
