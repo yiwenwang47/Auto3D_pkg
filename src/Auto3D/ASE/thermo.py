@@ -128,12 +128,6 @@ def model_name2model_calculator(model_name: str, device=torch.device("cpu"), cha
     elif model_name == "AIMNET":
         # Using the ensemble AIMNet2 model for computing energy and forces
         aimnet = torch.jit.load(
-            os.path.join(root, "models/aimnet2_wb97m_ens_f.jpt"), map_location=device
-        )
-        model = EnForce_ANI(aimnet, model_name)
-        calculator = Calculator(model, charge)
-    elif model_name == "AIMNET-lite":
-        aimnet = torch.jit.load(
             os.path.join(root, "models/aimnet2_wb97m-d3_0.jpt"), map_location=device
         )
         model = EnForce_ANI(aimnet, model_name)
